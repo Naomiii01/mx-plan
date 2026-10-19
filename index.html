@@ -776,6 +776,8 @@ body:not(.v-dsp) #secDsp{display:none}
 #sbLogin button.pri{background:var(--accent,#9A7466);color:#fff;border-color:transparent}#sbLogin .msg{margin-top:12px;font-size:13px;color:var(--red,#AE5F55);min-height:1em}#sbLogin .msg.ok{color:#3d7a52}
 #sbLogin a{color:var(--accent,#9A7466);font-size:13px;cursor:pointer}
 #sbWho{position:fixed;right:10px;bottom:10px;z-index:50;font-size:12px;background:var(--panel,#FAF7F3);border:1px solid var(--line,#DDD3C8);border-radius:999px;padding:4px 10px;color:var(--ink-2,#6D635B)}
+#sbWho .st{cursor:pointer;margin-right:6px}#sbWho .st.ok{color:#5E8A6A}#sbWho .st.bad{color:var(--red,#AE5F55);font-weight:600}
+#sbErr{position:fixed;left:50%;transform:translateX(-50%);top:10px;z-index:10000;background:#AE5F55;color:#fff;border-radius:10px;padding:10px 14px;font-size:13.5px;max-width:92vw;box-shadow:0 6px 20px rgba(0,0,0,.18)}
 #sbWho button{border:0;background:none;color:var(--accent,#9A7466);cursor:pointer;font-size:12px;margin-left:6px}
 </style>
 <script>
@@ -814,7 +816,8 @@ body:not(.v-dsp) #secDsp{display:none}
   function hideLogin(){ const el=document.getElementById("sbLogin"); if(el) el.remove(); }
   function showWho(){ let w=document.getElementById("sbWho"); if(!w){ w=document.createElement("div"); w.id="sbWho"; document.body.appendChild(w); }
     const own=(user.email||"").toLowerCase()===OWNER;
-    w.innerHTML=`${user.email}${own?`<button id="sbImp">匯入搬家檔</button>`:""}<button id="sbOut">登出</button>`; w.querySelector("#sbOut").onclick=async()=>{ await sb.auth.signOut(); location.reload(); };
+    w.innerHTML=`<span class="st" id="sbSt" title="點一下立即重新同步"></span>${user.email}${own?`<button id="sbImp">匯入搬家檔</button>`:""}<button id="sbOut">登出</button>`; w.querySelector("#sbOut").onclick=async()=>{ await sb.auth.signOut(); location.reload(); };
+    w.querySelector("#sbSt").onclick=()=>resyncAll(true); paintSt();
     const ib=w.querySelector("#sbImp"); if(ib){ const f=document.createElement("input"); f.type="file"; f.accept=".json"; f.hidden=true; w.appendChild(f); ib.onclick=()=>f.click();
       f.onchange=async()=>{ const file=f.files[0]; if(!file) return; let J; try{ J=JSON.parse(await file.text()); }catch(e){ alert("檔案格式不正確"); return; }
         const docs=Object.entries(J.docs||{}); if(!docs.length){ alert("檔案裡沒有資料"); return; }
@@ -840,13 +843,33 @@ body:not(.v-dsp) #secDsp{display:none}
   /* ---- doc store with the same surface the page used (doc/collection, get/set/update/delete, where/orderBy/limit, onSnapshot) ---- */
   const split=p=>{ const i=p.indexOf("/"); return [p.slice(0,i),p.slice(i+1)]; };
   const docSnap=(path,row)=>({id:split(path)[1],exists:!!row,data:()=>row?clone(row.data):undefined});
+  /* ---- sync health: phones suspend the realtime socket in the background, so every listener can also re-read on demand ---- */
+  const syncers=new Set(); let lastSync=0, syncing=false, wErr="";
+  const hm=t=>{ const d=new Date(t); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
+  function paintSt(){ const el=document.getElementById("sbSt"); if(!el) return; const down=Object.values(chans).some(c=>c.state&&c.state!=="SUBSCRIBED");
+    const bad=!!wErr||!navigator.onLine||down; el.className="st "+(bad?"bad":"ok");
+    el.textContent=wErr?"⚠ 儲存失敗":!navigator.onLine?"○ 離線":syncing?"↻ 同步中":down?"○ 重新連線中":"● 已同步"+(lastSync?" "+hm(lastSync):""); }
+  function flash(t){ let e=document.getElementById("sbErr"); if(!e){ e=document.createElement("div"); e.id="sbErr"; document.body.appendChild(e); } e.textContent=t; clearTimeout(e._t); e._t=setTimeout(()=>e.remove(),8000); }
+  async function resyncAll(manual){ if(syncing||!user) return; syncing=true; if(manual) wErr=""; paintSt();
+    for(const c of Object.values(chans)) if(c.state&&c.state!=="SUBSCRIBED") sub(c);
+    try{ await Promise.all([...syncers].map(f=>f().catch(()=>{}))); lastSync=Date.now(); }finally{ syncing=false; paintSt(); }
+    if(manual&&!wErr) flash2("已重新同步 "+hm(lastSync)); }
+  function flash2(t){ const o=document.getElementById("sbErr"); if(o) o.remove(); const e=document.createElement("div"); e.id="sbErr"; e.style.background="#5E8A6A"; e.textContent=t; document.body.appendChild(e); setTimeout(()=>e.remove(),2500); }
+  const wake=()=>{ if(document.visibilityState==="visible") resyncAll(); };
+  document.addEventListener("visibilitychange",wake); window.addEventListener("focus",wake); window.addEventListener("pageshow",wake);
+  window.addEventListener("online",()=>resyncAll()); window.addEventListener("offline",paintSt);
+  setInterval(()=>{ if(document.visibilityState==="visible"&&Date.now()-lastSync>55000) resyncAll(); },60000);
   // one realtime channel per collection, shared by every listener on it
   const chans={};
-  function onColl(coll,fn){ let c=chans[coll]; if(!c){ c=chans[coll]={fns:new Set()};
-      c.ch=sb.channel("docs-"+coll).on("postgres_changes",{event:"*",schema:"public",table:"docs",filter:"coll=eq."+coll},async p=>{
+  function sub(c){ if(c.ch){ try{ sb.removeChannel(c.ch); }catch(e){} }
+    c.state="JOINING"; const coll=c.coll;
+    c.ch=sb.channel("docs-"+coll+"-"+Date.now().toString(36)).on("postgres_changes",{event:"*",schema:"public",table:"docs",filter:"coll=eq."+coll},async p=>{
         let row=p.new&&p.new.path?p.new:null; const delPath=p.eventType==="DELETE"?(p.old&&p.old.path):null;
         if(row&&(row.data===undefined||row.data===null)){ const r=await sb.from("docs").select("path,id,data").eq("path",row.path).maybeSingle(); row=r.data||null; }
-        c.fns.forEach(f=>f(row,delPath)); }).subscribe(); }
+        lastSync=Date.now(); c.fns.forEach(f=>f(row,delPath)); paintSt(); }).subscribe(st=>{ const was=c.state; c.state=st; paintSt();
+        if(st==="SUBSCRIBED"&&was&&was!=="JOINING") resyncAll();
+        if(st==="CHANNEL_ERROR"||st==="TIMED_OUT"||st==="CLOSED"){ clearTimeout(c.rt); c.rt=setTimeout(()=>{ if(c.state!=="SUBSCRIBED") sub(c); },5000); } }); }
+  function onColl(coll,fn){ let c=chans[coll]; if(!c){ c=chans[coll]={fns:new Set(),coll}; sub(c); }
     c.fns.add(fn); return ()=>c.fns.delete(fn); }
   const OPS={">=":"gte",">":"gt","<=":"lte","<":"lt","==":"eq","!=":"neq"};
   const cmp=(a,op,b)=>op===">="?a>=b:op===">"?a>b:op==="<="?a<=b:op==="<"?a<b:op==="=="?a==b:a!=b;
@@ -867,18 +890,23 @@ body:not(.v-dsp) #secDsp{display:none}
         cb({size:L.length,docs:L.map(([id,d])=>({id,exists:true,data:()=>clone(d)})),metadata:{fromCache:false}}); },30); };
       const un=onColl(coll,(row,delPath)=>{ if(delPath){ map.delete(split(delPath)[1]); emit(); return; } if(!row) return;
         if(pass(row.data)) map.set(row.id,row.data); else map.delete(row.id); emit(); });
-      this._fetch().then(d=>{ d.forEach(x=>map.set(x.id,x.data)); emit(); }).catch(e=>ecb&&ecb(e));
-      return ()=>{ off=true; un(); }; } }; }
+      const self=this; const full=()=>self._fetch().then(d=>{ map.clear(); d.forEach(x=>map.set(x.id,x.data)); lastSync=Date.now(); emit(); });
+      this._fetch().then(d=>{ d.forEach(x=>map.set(x.id,x.data)); lastSync=Date.now(); paintSt(); emit(); }).catch(e=>ecb&&ecb(e));
+      syncers.add(full); return ()=>{ off=true; un(); syncers.delete(full); }; } }; }
+  async function wr(q){ let r; try{ r=await q; }catch(e){ r={error:e}; }
+    if(r&&r.error){ const e=err(r.error); wErr=e.message; paintSt(); flash("⚠ 儲存失敗，這筆變更沒有存到共用資料庫："+(e.code==="unavailable"?"網路中斷，請確認連線後再改一次":e.message)); throw e; }
+    if(wErr){ wErr=""; } paintSt(); }
   const db={
     collection:name=>query(name,{}),
     doc(path){ const [coll,id]=split(path); return {
       id,
       async get(){ const {data,error}=await sb.from("docs").select("path,data").eq("path",path).maybeSingle(); if(error) throw err(error); return docSnap(path,data); },
-      async set(obj){ const {error}=await sb.from("docs").upsert({path,coll,id,data:clone(obj),updated_at:new Date().toISOString(),updated_by:user&&user.id}); if(error) throw err(error); },
-      async update(patch){ const {error}=await sb.rpc("doc_update",{p_path:path,p_patch:clone(patch)}); if(error) throw err(error); },
-      async delete(){ const {error}=await sb.from("docs").delete().eq("path",path); if(error) throw err(error); },
+      async set(obj){ return wr(sb.from("docs").upsert({path,coll,id,data:clone(obj),updated_at:new Date().toISOString(),updated_by:user&&user.id})); },
+      async update(patch){ return wr(sb.rpc("doc_update",{p_path:path,p_patch:clone(patch)})); },
+      async delete(){ return wr(sb.from("docs").delete().eq("path",path)); },
       onSnapshot(cb,ecb){ let off=false; const un=onColl(coll,(row,delPath)=>{ if(off) return; if(delPath===path) cb(docSnap(path,null)); else if(row&&row.path===path) cb(docSnap(path,row)); });
-        this.get().then(s=>{ if(!off) cb(s); }).catch(e=>ecb&&ecb(e)); return ()=>{ off=true; un(); }; } }; }
+        const self=this; const full=()=>self.get().then(s=>{ if(!off) cb(s); });
+        this.get().then(s=>{ if(!off) cb(s); }).catch(e=>ecb&&ecb(e)); syncers.add(full); return ()=>{ off=true; un(); syncers.delete(full); }; } }; }
   };
   const userApi={
     async me(){ return {id:user.id,name:(user.email||"").split("@")[0]}; },
