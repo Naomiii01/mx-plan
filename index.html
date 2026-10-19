@@ -937,6 +937,7 @@ body:not(.v-dsp) #secDsp{display:none}
         <button class="btn" id="btnHmv"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 13h12M3 13V7l5-3 5 3v6M6.5 13v-3h3v3"/></svg>HMV</button>
         <button class="btn" id="btnAdhoc"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v10M3 8h10"/></svg>臨時工單</button>
         <button class="btn" id="btnDone"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m3 8.5 3 3 7-7"/></svg>匯入完工</button>
+        <button class="btn" id="btnRetTop" title="登錄退工（同月計畫總覽裡的「匯入退工」）"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 4 2.5 7.5 6 11M3 7.5h7a3.5 3.5 0 0 1 0 7H8"/></svg>匯入退工</button>
         <button class="btn" id="btnExport"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2v9M4.5 7.5 8 11l3.5-3.5M2.5 11v2.5h11V11"/></svg>匯出管控檔</button>
         <button class="btn ghost" id="btnSettings">設定</button>
       </div>
@@ -4288,7 +4289,7 @@ document.addEventListener("paste",e=>{
 $("#btnAdhoc").onclick=()=>openAdhoc();
 $("#btnHmv").onclick=()=>hmvDlg();
 $("#btnStn").onclick=()=>stationDlg();
-$("#btnRetImp").onclick=()=>openRetImport();
+$("#btnRetImp").onclick=()=>openRetImport(); $("#btnRetTop").onclick=()=>openRetImport();
 
 /* =====================================================================
    DEMO (fictional)
@@ -4351,7 +4352,7 @@ async function boot(){
     if(isOwner) db.collection("join").onSnapshot(snap=>{ const o={}; snap.docs.forEach(x=>{o[x.id]=x.data();}); M.joins=o; render(); },()=>{});
     else if(me&&me.id) db.doc("join/"+me.id).onSnapshot(sn=>{ myJoin=sn.exists?sn.data():null; render(); },()=>{});
     db.collection("logs").orderBy("at","desc").limit(40).onSnapshot(snap=>{ if(demo) return; const o={}; snap.docs.forEach(x=>{o[x.id]=x.data();}); M.logs=o; render(); },onDbErr);
-    if(canWrite===false){ ["#btnPlan","#btnDone"].forEach(s=>$(s).disabled=true); }
+    if(canWrite===false){ ["#btnPlan","#btnDone","#btnRetTop"].forEach(s=>$(s).disabled=true); }
     if(isOwner){ membersLoaded=membersLoaded; }
   } else {
     mode="local";
