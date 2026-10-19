@@ -652,6 +652,14 @@ body:not(.v-pri) #secPri{display:none}
 .pri-rule{font-size:11.5px;color:var(--amber);margin-top:3px}.pri-sug{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:4px;font-size:12px}.pri-sug .chip.sm{font-size:11.5px;padding:2px 8px}
 button.mini.pz{cursor:pointer;font:inherit;font-size:11.5px}
 button.linkish{background:none;border:0;padding:0;font:inherit;color:var(--accent,#2f5d8a);text-decoration:underline;cursor:pointer}
+.ld-th{align-items:center;gap:8px}.ld-th>span{margin-left:auto}.ld-plan{order:3;padding:1px 8px!important;font-size:11.5px!important;min-height:0!important}
+.dlg.lp-dlg{max-width:760px;width:100%}.lp-wrap{max-height:58vh;overflow:auto;margin:6px 0;border:1px solid var(--line);border-radius:8px}
+.lp-s>summary{cursor:pointer;padding:7px 10px;background:var(--panel-2);font-size:13px;position:sticky;top:0;z-index:1}
+.lp-r{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:start;padding:7px 10px;border-top:1px solid var(--line);cursor:pointer;font-size:13px}
+.lp-r:hover{background:var(--panel-2)}.lp-r input{margin-top:3px}.lp-r.blk{opacity:.55;cursor:not-allowed}
+.lp-m{display:flex;flex-direction:column;gap:2px;min-width:0}.lp-t{color:var(--ink-2);font-size:12.5px}.lp-f{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;font-size:11.5px}
+.lp-h{font-size:12.5px;color:var(--ink-2)}.lp-sum{font-size:13px;padding:6px 10px;background:var(--panel-2);border-radius:8px}
+.mini.neg{color:var(--red);border-color:var(--red)}
 .ld-w.rt{opacity:.85}.ld-t.has-long .ld-th{box-shadow:inset 3px 0 0 var(--red,#a33)}
 .pri-opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;margin:8px 0}
 .chk-p small{font-size:10.5px;margin-left:2px}
@@ -3460,14 +3468,14 @@ function renderLoad(){
       return {t,ws,rs,mh:Math.round((sw+sr+sy)*10)/10,sy,long:ws.filter(w=>isLong(w,mhOf(w))).length}; });
     const busy=rows.filter(r=>r.ws.length||r.rs.length), idle=rows.filter(r=>!r.ws.length&&!r.rs.length);
     const srt=ui.ldSort==="mh"?(a,b)=>b.mh-a.mh||a.t.localeCompare(b.t):(a,b)=>a.t.localeCompare(b.t);
-    const card=r=>`<div class="ld-t ${r.long?"has-long":""}"><div class="ld-th"><b class="mono">${esc(r.t)}</b><span>${r.ws.length} 張${r.rs.length?` ＋例行 ${r.rs.length}`:""} · <b>${r.mh}</b> MH${r.long?` · <span class="neg">長 ${r.long}</span>`:""}${(()=>{ const x_=stintAt(r.t,sel); return x_?` · 駐 ${esc(x_.station)}`:""; })()}</span></div>
+    const card=r=>`<div class="ld-t ${r.long?"has-long":""}"><div class="ld-th"><b class="mono">${esc(r.t)}</b>${canWrite!==false?`<button class="btn sm ld-plan" data-ldplan="${esc(r.t)}|${sel}" title="在 ${esc(fmtD(sel).slice(5))} 幫 ${esc(r.t)} 排工單">＋排工</button>`:""}<span>${r.ws.length} 張${r.rs.length?` ＋例行 ${r.rs.length}`:""} · <b>${r.mh}</b> MH${r.long?` · <span class="neg">長 ${r.long}</span>`:""}${(()=>{ const x_=stintAt(r.t,sel); return x_?` · 駐 ${esc(x_.station)}`:""; })()}</span></div>
         ${r.ws.map(w=>{ const h=mhOf(w), lg=isLong(w,h); return `<div class="ld-w ${lg?"lg":""}"><button class="wo-link mono" data-hist="${esc(w.wo)}">${esc(w.wo)}</button><span class="t">${cardOf(w)?`<b class="mono ld-card">${esc(cardOf(w))}</b>`:""}${esc(w.title||"")}${w.st==="done"?` <span class="mini ok">已完工</span>`:!w.sched&&w.auto?` <span class="mini">預排</span>`:""}</span><span class="mono h">${h==null?"?":h}</span>${lg?`<span class="mini warn">長工時</span>`:""}</div>`; }).join("")}
         ${r.rs.map(q=>`<div class="ld-w rt"><span class="mono muted" style="font-size:11.5px">${q.routine?"例行":"短天期"}</span><span class="t"><b class="mono ld-card">${esc(q.task)}</b>${esc(q.desc.slice(0,60))}</span><span class="mono h">${q.mh||"?"}</span></div>`).join("")}
         ${r.sy?`<div class="ld-w rt"><span class="mono muted" style="font-size:11.5px">STY</span><span class="t">STAYOVER CHECK</span><span class="mono h">${r.sy}</span></div>`:""}</div>`;
     detail=`<div class="ld"><div class="ld-h"><h3>${esc(dayLabel(sel))}</h3><span>${x.n} 張 · ${dx.mh} MH（工單 ${dx.woMH}${dx.shMH?`，其中短天期 ${dx.shMH}`:""}${ui.loadRt?`；例行短天期 ${dx.rtMH}`:""}${ui.loadSty?`；STY ${dx.styMH}`:""}）${x.unk?`（另 ${x.unk} 張無工時）`:""} · 長工時 ${x.long.length} · 有排工 ${busy.length} 架</span>
       <span class="seg" style="margin-left:auto"><button class="chip sm ${ui.ldSort!=="mh"?"on":""}" data-ldsort="">依機號</button><button class="chip sm ${ui.ldSort==="mh"?"on":""}" data-ldsort="mh">依工時多→少</button></span><button class="btn sm" data-lopen="${sel}">在今日控管開啟這天</button></div>
       <div class="ld-g">${busy.sort(srt).map(card).join("")||`<div class="empty sm">這一天沒有排定工單</div>`}</div>
-      ${hm.length||idle.length?`<p class="muted" style="font-size:12.5px;margin:8px 0 0">${hm.length?`🔧 HMV：${hm.map(esc).join("、")}　`:""}${idle.length?`沒有排工：${idle.map(r=>esc(r.t)).join("、")}`:""}</p>`:""}</div>`; }
+      ${hm.length||idle.length?`<p class="muted" style="font-size:12.5px;margin:8px 0 0">${hm.length?`🔧 HMV：${hm.map(esc).join("、")}　`:""}${idle.length?`沒有排工（點機號可排工）：${idle.map(r=>canWrite!==false?`<button class="linkish mono" data-ldplan="${esc(r.t)}|${sel}">${esc(r.t)}</button>`:esc(r.t)).join("、")}`:""}</p>`:""}</div>`; }
   el.innerHTML=`<div class="d-bar">
       <div class="d-nav"><button class="btn" data-lmon="-1" aria-label="上個月">‹</button><span class="d-pick"><b>${y} 年 ${m} 月</b></span><button class="btn" data-lmon="1" aria-label="下個月">›</button></div>
       <div class="fleet-tabs d-types"><button class="chip ${!ui.loadType?"on":""}" data-lty="">全機隊</button>${types.map(t=>`<button class="chip ${ui.loadType===t?"on":""}" data-lty="${esc(t)}">${esc(t)}</button>`).join("")}</div>
@@ -3490,6 +3498,60 @@ function renderLoad(){
   $("#lSty").onchange=e=>{ ui.loadSty=e.target.checked; try{ localStorage.setItem("mxplan.loadSty",ui.loadSty?"1":"0"); }catch(x){} renderLoad(); };
   el.querySelectorAll("[data-mhmiss]").forEach(b=>b.onclick=()=>mhMissDlg(b.dataset.mhmiss));
   el.querySelectorAll("[data-ldsort]").forEach(b=>b.onclick=()=>{ ui.ldSort=b.dataset.ldsort; renderLoad(); });
+  el.querySelectorAll("[data-ldplan]").forEach(b=>b.onclick=()=>{ const [t,d]=b.dataset.ldplan.split("|"); ldPlanDlg(t,d); });
+}
+/* 月負荷 → 排工: pick a day and an aircraft, then tick the WOs to put on that day (or untick to take them off) */
+function ldPlanDlg(tail,day){
+  if(canWrite===false){ showMsg("沒有編輯權限","<p>你目前只能檢視。</p>"); return; }
+  const T=todayISO(); const scN=w=>(((M.sched[shardOf(w.wo)]||{}).e||{})[w.wo]||{}).n;
+  const L=derive().all.filter(w=>w.tail===tail&&!w.noWo&&!w.removed&&!["done","hmv"].includes(w.st));
+  const on=L.filter(w=>w.sched===day), other=L.filter(w=>w.sched&&w.sched!==day), autoOn=L.filter(w=>!w.sched&&w.auto&&(w.projD<T?T:w.projD)===day), free=L.filter(w=>!w.sched&&!autoOn.includes(w));
+  const byDue=(a,b)=>((a.effDue||a.due||"9999")<(b.effDue||b.due||"9999")?-1:(a.effDue||a.due||"9999")>(b.effDue||b.due||"9999")?1:String(a.wo).localeCompare(String(b.wo)));
+  const doneDay=derive().all.filter(w=>w.tail===tail&&w.st==="done"&&(w.doneDate||w.sched)===day);
+  // where the aircraft is that day
+  const wins=flWins(tail,day), stn=stintAt(tail,day), hm=hmvAt(tail,day);
+  const where=hm?`<span class="mini warn">🔧 HMV 中</span>`:flCovers(tail,day)?(wins.length?wins.map(x=>`<span class="mini ${x.ok?"ok":""}">${esc(x.st)} ${esc(x.a?x.a.slice(11):"?")}–${esc(x.b?x.b.slice(11):"?")} ${esc(FLK[x.kind]||"")}</span>`).join(" "):`<span class="mini warn">依航班：當天沒有地停</span>`):stn?`<span class="mini">駐 ${esc(stn.station)} ${esc(fmtD(stn.start).slice(5))}–${esc(fmtD(stn.end).slice(5)||"?")}</span>`:`<span class="mini">TPE（無航班資料）</span>`;
+  const warnOf=w=>{ const r=[]; const st0=w.start||""; const due=w.effDue||w.due||"";
+    if(w.hold) r.push({b:true,t:w.holdR&&w.holdR.wt?"暫緩："+w.holdR.wt.r:"退工待澄清"});
+    if(st0&&day<st0) r.push({b:true,t:`起始日 ${fmtD(st0).slice(5)} 起（可按 ✎ 改起始日）`});
+    if(due&&day>due) r.push({t:`超過到期 ${fmtD(due).slice(5)}`});
+    if(w.wm) r.push({t:"待料"+(w.eta?" · 料到 "+fmtD(w.eta).slice(5):"")});
+    if(hm) r.push({t:"當天 HMV"});
+    else if(flCovers(tail,day)){ if(!flWork(tail,day,flStations(w,scN(w)))) r.push({t:"當天無可做工地停"+(stationOK(w,"RMQ",scN(w))||stationOK(w,"KHH",scN(w))?"":"（限 TPE）")}); }
+    else if(stn&&!stationOK(w,String(stn.station).toUpperCase(),scN(w))) r.push({t:`駐 ${stn.station}，未標可在外站執行`});
+    priCheck({...w,sched:day},priOf(w)).bad.forEach(t=>r.push({t}));
+    return r; };
+  const row=(w,ck,extra)=>{ const h=mhOf(w), W=warnOf(w), blk=W.some(x=>x.b)&&!ck; const due=w.effDue||w.due||"";
+    return `<label class="lp-r ${blk?"blk":""}"><input type="checkbox" data-lp="${esc(w.wo)}" data-mh="${h==null?"":h}" ${ck?"checked":""} ${blk?"disabled":""}>
+      <span class="lp-m"><span><b class="mono">${esc(cardOf(w)||w.wo)}</b> <span class="muted mono" style="font-size:11.5px">WO ${esc(w.wo)}</span>${extra||""}</span><span class="lp-t">${esc((w.title||"").slice(0,70))}</span>
+      <span class="lp-f">${due?`<span class="mono">DUE ${esc(fmtD(due).slice(5))}${w.left!=null?`（剩 ${w.left} 天）`:""}</span>`:`<span class="muted">依 FH/FC</span>`}${w.start?`<span class="mono muted">${esc(fmtD(w.start).slice(5))} 起</span>`:""}${w.auto&&w.projD?`<span class="mini">預排 ${esc(fmtD(w.projD).slice(5))}</span>`:""}${W.map(x=>`<span class="mini ${x.b?"neg":"warn"}">${esc(x.t)}</span>`).join("")}</span></span>
+      <span class="mono lp-h">${h==null?"?":h}</span></label>`; };
+  const sec=(ttl,L_,ck,ex,open)=>L_.length?`<details class="lp-s" ${open?"open":""}><summary><b>${ttl}</b> <span class="muted">${L_.length} 張</span></summary>${L_.sort(byDue).map(w=>row(w,ck,ex&&ex(w))).join("")}</details>`:"";
+  const d=openDlg(`<h3>${esc(tail)}　${esc(dayLabel(day))} 排工</h3>
+    <p style="margin:0 0 6px">${where}</p>
+    <p class="muted" style="font-size:12.5px;margin:0 0 8px">勾選＝排在這一天；取消勾選＝移出這一天（變回未排定）。紅色標籤的工單不能排在這天。${doneDay.length?`　當天已完工 ${doneDay.length} 張。`:""}</p>
+    <div class="lp-sum" id="lpSum"></div>
+    <div class="lp-wrap">
+      ${sec("已排在這天",on,true,null,true)}
+      ${sec("短天期自動預排在這天（勾選＝確定排定）",autoOn,false,null,true)}
+      ${sec("未排定（依到期日）",free,false,null,true)||(autoOn.length?"":`<p class="muted" style="font-size:13px;padding:8px 10px">這架沒有未排定的工單。</p>`)}
+      ${sec("已排在其他天（勾選會改到這天）",other,false,w=>` <span class="mini">目前 ${esc(fmtD(w.sched).slice(5))}</span>`,false)}
+    </div>
+    <div class="foot"><button class="btn" data-n>取消</button><button class="btn primary" data-y>儲存</button></div>`);
+  d.classList.add("lp-dlg");
+  const base0=on.reduce((a,w)=>a+(mhOf(w)||0),0);
+  const sum=()=>{ const C=[...d.querySelectorAll("[data-lp]")].filter(x=>x.checked); const mh=C.reduce((a,x)=>a+(+x.dataset.mh||0),0), unk=C.filter(x=>x.dataset.mh==="").length;
+    const add=C.filter(x=>!on.some(w=>w.wo===x.dataset.lp)).length, rm=on.filter(w=>!C.some(x=>x.dataset.lp===w.wo)).length;
+    d.querySelector("#lpSum").innerHTML=`這天 ${esc(tail)}：<b>${C.length}</b> 張 · <b>${Math.round(mh*10)/10}</b> MH${unk?`（另 ${unk} 張無工時）`:""}${add||rm?`　<span class="mini warn">${add?`＋${add} 張`:""}${add&&rm?"、":""}${rm?`−${rm} 張`:""}</span>`:""}`; };
+  d.addEventListener("change",e=>{ if(e.target.matches("[data-lp]")) sum(); }); sum();
+  d.querySelector("[data-n]").onclick=closeDlg;
+  d.querySelector("[data-y]").onclick=async()=>{ const C=new Set([...d.querySelectorAll("[data-lp]")].filter(x=>x.checked).map(x=>x.dataset.lp));
+    const add=L.filter(w=>C.has(w.wo)&&w.sched!==day), rm=on.filter(w=>!C.has(w.wo));
+    if(!add.length&&!rm.length){ closeDlg(); return; }
+    const y=d.querySelector("[data-y]"); y.disabled=true; y.textContent="儲存中…";
+    try{ for(const w of add) await saveSched(w.wo,{d:day}); for(const w of rm) await saveSched(w.wo,{d:""}); }
+    catch(e){ y.disabled=false; y.textContent="儲存"; return; }
+    closeDlg(); invalidate(); renderLoad(); toast(`${tail} ${fmtD(day).slice(5)}：${add.length?`排入 ${add.length} 張`:""}${add.length&&rm.length?"、":""}${rm.length?`移出 ${rm.length} 張`:""}`); };
 }
 /* 缺工時: cards in this month's load with no Est. Hours — the planner fills them in (kept apart from the Est. Hours median, so a later completion import does not overwrite them) */
 // "1*4"（1 人 × 4 小時）、"2x1.5"、"3"、"1*2+0.5" → MH
