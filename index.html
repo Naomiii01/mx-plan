@@ -2764,18 +2764,20 @@ function retSheets(wb,RR,hdr,title){
   // summary: by reason, by fleet, by progress
   const cnt=f=>{ const m={}; RR.forEach(x=>{ const k=f(x)||"未填"; m[k]=(m[k]||0)+1; }); return Object.entries(m).sort((a,b)=>b[1]-a[1]); };
   const pgName=x=>{ const k=retProgress(x).k; return {done:"已完工",resched:"已重排",late:"已重排但過排定日",pending:"待重排",again:"再次退工",gone:"不在管控表",wait:"待澄清"}[k]; };
-  const a=[[title||"退工統計",""],["退工次數",RR.length],["涉及工單",new Set(RR.map(x=>x.wo)).size],[],["依原因","次數"],...cnt(x=>x.reason),[],["依機型","次數"],...cnt(x=>x.type),[],["依機號","次數"],...cnt(x=>x.tail),[],["依 Task Card（前 20）","次數"],...cnt(x=>recCard(x)).slice(0,20),[],["目前進度","次數"],...cnt(pgName)];
+  const a=[[title||"退工統計",""],["退工次數",RR.length],["涉及工單",new Set(RR.filter(x=>x.wo).map(x=>x.wo)).size],[],...(new Set(RR.map(x=>(x.date||"").slice(0,7))).size>1?[["依月份","次數"],...cnt(x=>(x.date||"").slice(0,7).replace("-","/")).sort((a,b)=>a[0]<b[0]?-1:1),[]]:[]),["依原因","次數"],...cnt(x=>x.reason),[],["依機型","次數"],...cnt(x=>x.type),[],["依機號","次數"],...cnt(x=>x.tail),[],["依 Task Card（前 20）","次數"],...cnt(x=>recCard(x)).slice(0,20),[],["目前進度","次數"],...cnt(pgName)];
   const s2=XLSX.utils.aoa_to_sheet(a); s2["!cols"]=[{wch:22},{wch:8}];
   a.forEach((r,i)=>{ if(r.length===2&&r[1]==="次數"){ for(let c=0;c<2;c++){ const ref=XLSX.utils.encode_cell({r:i,c}); if(s2[ref]) s2[ref].s={font:{bold:true,color:{rgb:"FFFFFF"}},fill:{fgColor:{rgb:"8C7266"}}}; } } });
   if(s2.A1) s2.A1.s={font:{bold:true,sz:13}};
   XLSX.utils.book_append_sheet(wb,s2,"退工統計");
 }
-async function exportReturns(mo){
-  const RR=recList("returns").filter(x=>(x.date||"").slice(0,7)===mo&&(!ui.type||x.type===ui.type)&&(!ui.tail||x.tail===ui.tail));
-  if(!RR.length){ toast("這個月份沒有退工紀錄"); return; }
+async function exportReturns(mo,to){   // 單月：exportReturns("2026-09")；區間：exportReturns("2026-08","2026-10")
+  to=to||mo; if(to<mo){ const t=mo; mo=to; to=t; }
+  const RR=recList("returns").filter(x=>{ const m=(x.date||"").slice(0,7); return m>=mo&&m<=to&&(!ui.type||x.type===ui.type)&&(!ui.tail||x.tail===ui.tail); });
+  if(!RR.length){ toast(mo===to?"這個月份沒有退工紀錄":"這個區間沒有退工紀錄"); return; }
+  const lab=mo===to?mo.replace("-","/"):`${mo.replace("-","/")}～${to.replace("-","/")}`, fn=mo===to?mo.replace("-",""):`${mo.replace("-","")}-${to.replace("-","")}`;
   const hdr=(ws,n)=>{for(let c=0;c<n;c++){ const r=XLSX.utils.encode_cell({r:0,c}); if(ws[r]) ws[r].s={font:{bold:true,color:{rgb:"FFFFFF"}},fill:{fgColor:{rgb:"8C7266"}}};}};
-  const wb=XLSX.utils.book_new(); retSheets(wb,RR,hdr,`${mo.replace("-","/")} 退工統計${ui.tail||ui.type?"（"+(ui.tail||ui.type)+"）":""}`);
-  return saveWb(wb,`退工紀錄_${(ui.tail||ui.type)?(ui.tail||ui.type)+"_":""}${mo.replace("-","")}.xlsx`);
+  const wb=XLSX.utils.book_new(); retSheets(wb,RR,hdr,`${lab} 退工統計${ui.tail||ui.type?"（"+(ui.tail||ui.type)+"）":""}`);
+  return saveWb(wb,`退工紀錄_${(ui.tail||ui.type)?(ui.tail||ui.type)+"_":""}${fn}.xlsx`);
 }
 function extrasDlg(){
   const all=derive().extras; const st={ty:"",tail:ui.tail||"",q:""};
@@ -2927,16 +2929,27 @@ function exportDlg(){
       <div class="xst">${order.map(k=>{const n=cnt(k); return `<label class="chip ${n?"":"dim"}"><input type="checkbox" value="${k}" ${k==="over"?"checked":""}> ${ST[k].t} <span class="ct">${n}</span></label>`;}).join("")}</div>
       <p style="margin-top:6px">要限定機型或機號，先在「機隊／機號」點選再匯出。</p></div>
     ${(()=>{ const ms=[...new Set(recList("returns").map(x=>(x.date||"").slice(0,7)).filter(Boolean).concat([todayISO().slice(0,7)]))].sort().reverse();
-      return `<div class="exp-opt"><label><input type="radio" name="xMode" value="ret"> <b>退工紀錄（依月份）</b></label><div class="xst"><select id="xRetM" aria-label="退工月份">${ms.map(m=>`<option value="${m}">${m.replace("-","/")}（${recList("returns").filter(x=>(x.date||"").slice(0,7)===m).length} 筆）</option>`).join("")}</select></div><p>每筆退工的原因、目前進度（待重排／已重排／已完工），另附依原因、機型、機號的統計。</p></div>`; })()}
+      const nOf=m=>recList("returns").filter(x=>(x.date||"").slice(0,7)===m).length, opt=(m,sel)=>`<option value="${m}" ${sel?"selected":""}>${m.replace("-","/")}（${nOf(m)} 筆）</option>`, sel_='style="padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2)"';
+      return `<div class="exp-opt"><label><input type="radio" name="xMode" value="ret"> <b>退工紀錄</b></label>
+        <div class="xrt" style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+          <label style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><input type="radio" name="xRetK" value="m" checked> 單月 <select id="xRetM" ${sel_} aria-label="退工月份">${ms.map(m=>opt(m)).join("")}</select></label>
+          <label style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><input type="radio" name="xRetK" value="r"> 區間 <select id="xRetF" ${sel_} aria-label="起始月份">${ms.slice().reverse().map((m,i)=>opt(m,i===0)).join("")}</select> 至 <select id="xRetT" ${sel_} aria-label="結束月份">${ms.map((m,i)=>opt(m,i===0)).join("")}</select> <span id="xRetN" class="muted" style="font-size:12.5px"></span></label>
+        </div><p>每筆退工的原因、目前進度（待重排／已重排／已完工），另附依原因、機型、機號的統計。</p></div>`; })()}
     <div id="xWarn"></div>
     <div class="foot"><button class="btn" data-n>取消</button><button class="btn primary" data-y>下載 Excel</button></div>`);
-  d.querySelector("#xRetM").onchange=()=>{ d.querySelector('input[name=xMode][value=ret]').checked=true; };
+  const retRange=()=>{ let f=d.querySelector("#xRetF").value, t=d.querySelector("#xRetT").value; if(t<f){ const x=f; f=t; t=x; } return [f,t]; };
+  const retCnt=()=>{ const [f,t]=retRange(); d.querySelector("#xRetN").textContent=`共 ${recList("returns").filter(x=>{ const m=(x.date||"").slice(0,7); return m>=f&&m<=t; }).length} 筆`; };
+  const pickRet=k=>{ d.querySelector('input[name=xMode][value=ret]').checked=true; if(k) d.querySelector(`input[name=xRetK][value=${k}]`).checked=true; retCnt(); };
+  d.querySelector("#xRetM").onchange=()=>pickRet("m");
+  d.querySelector("#xRetF").onchange=d.querySelector("#xRetT").onchange=()=>pickRet("r");
+  d.querySelectorAll("input[name=xRetK]").forEach(r=>r.onchange=()=>pickRet());
+  retCnt();
   d.querySelectorAll(".xst input").forEach(c=>c.onchange=()=>{ d.querySelector('input[name=xMode][value=st]').checked=true; });
   d.querySelector("[data-n]").onclick=closeDlg;
   d.querySelector("[data-y]").onclick=()=>{
     const m=d.querySelector("input[name=xMode]:checked").value;
     if(m==="full"){ closeDlg(); exportXlsx(); return; }
-    if(m==="ret"){ const mo=d.querySelector("#xRetM").value; closeDlg(); exportReturns(mo); return; }
+    if(m==="ret"){ const k=d.querySelector("input[name=xRetK]:checked").value; if(k==="r"){ const [f,t]=retRange(); closeDlg(); exportReturns(f,t); } else { const mo=d.querySelector("#xRetM").value; closeDlg(); exportReturns(mo); } return; }
     if(m==="view"){ closeDlg(); exportXlsx({list:view,label:viewLab,scope,file:(scope?scope+"_":"")+viewLab.replace(/[\\/:*?"<>|「」\s]/g,"")}); return; }
     const ks=[...d.querySelectorAll(".xst input:checked")].map(c=>c.value);
     if(!ks.length){ d.querySelector("#xWarn").innerHTML=`<p style="color:var(--red);font-size:13px">請至少勾選一個狀態。</p>`; return; }
