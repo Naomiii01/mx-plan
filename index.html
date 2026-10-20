@@ -242,6 +242,7 @@ details.more summary{cursor:pointer;color:var(--ink-2);font-size:13px}
 .imp-plan .ty{flex-direction:row;align-items:baseline;gap:6px;min-width:0;padding:4px 9px;white-space:nowrap}.imp-plan .ty b{font-size:14px}.imp-plan .imp-row{flex-wrap:wrap;gap:5px}
 .imp-ml{display:flex;flex-direction:column;min-width:60px;white-space:nowrap;font-size:12px;color:var(--ink-3)}.imp-ml b{font-size:13px;color:var(--ink)}.imp-ml small{font-size:11px}
 @media (max-width:1000px){.imp-top{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.imp-top .imp-plan{grid-column:1/-1}}
+@media (max-width:480px){.imp-plan .ty{white-space:normal;flex-wrap:wrap;max-width:100%}.imp-mrow{flex-wrap:wrap}}
 @media (max-width:640px){.imp-top{grid-template-columns:minmax(0,1fr)}.imp-mrow{flex-direction:column;align-items:flex-start;gap:4px}.imp-ml{flex-direction:row;gap:8px;align-items:baseline}}
 .imp-nxt{display:flex;min-width:0}.imp-nxt>.imp-card{flex:1;min-width:0}
 .imp-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
@@ -1191,7 +1192,7 @@ const B={
     const by=me&&me.id||"", at=new Date().toISOString();
     const ids=date?["manual-"+todayISO().slice(0,7)]:Object.keys(M.done).filter(k=>M.done[k].manual&&(M.done[k].recs||{})[wo]);
     for(const id of ids){
-      const patch={recs:{[wo]:date},who:{[wo]:{by,at}}};
+      const patch={manual:true,file:"今日控管手動回報",recs:{[wo]:date},who:{[wo]:{by,at}},...(M.done[id]&&M.done[id].at?{}:{at})};   // update() upserts a missing doc, so it must carry manual/file itself
       if(mode==="db"){ const cur=M.done[id]||{manual:true,file:"今日控管手動回報",at,recs:{},who:{}}; M.done[id]={...cur,recs:{...(cur.recs||{}),[wo]:date},who:{...(cur.who||{}),[wo]:{by,at}}}; invalidate();
         await q("done/"+id,async()=>{ const ref=db.doc("done/"+id);
           try{ return await withRetry(()=>ref.update(patch)); }catch(e){ if(e.code!=="invalid_argument") throw e; }
@@ -4031,6 +4032,7 @@ document.body.addEventListener("click",async e=>{
 });
 const lastSaved={}; // what this page last wrote per WO, so a repeated change event is not logged twice
 async function saveSched(wo,patch){
+  const prevL=lastSaved[wo];
   const sid=shardOf(wo); const cur={...(((M.sched[sid]||{}).e||{})[wo]||{}),...(lastSaved[wo]||{})};
   const entry={...cur,d:cur.d||"",n:cur.n||"",...patch,by:me&&me.id||"",at:new Date().toISOString()}; delete entry.was;
   if(entry.wm===false){ entry.eta=""; entry.mn=""; entry.wmAt=""; }  // explicit false: the shared doc merges map keys, so a missing key would keep the old flag
@@ -4045,8 +4047,12 @@ async function saveSched(wo,patch){
   { const {by:_b,at:_a,...keep}=entry; lastSaved[wo]=keep; }
   if(demo){ (M.sched[sid]=M.sched[sid]||{e:{}}).e[wo]=entry; invalidate(); render(); return; }
   if(mode==="local"){ await B.setSched(wo,entry); invalidate(); render(); return; }
+  const prevE=((M.sched[sid]||{}).e||{})[wo];
   { const sh=M.sched[sid]||{e:{}}; M.sched[sid]={...sh,e:{...(sh.e||{}),[wo]:{...entry}}}; invalidate(); if("d" in patch) renderDay(true); if(ptCh||ui.view==="pri") render(); }  // show it now; the shared copy arrives with the next snapshot
-  try{ await B.setSched(wo,entry); }catch(e){}
+  try{ await B.setSched(wo,entry); }
+  catch(e){   // not saved: put the screen back so it never shows a date the shared db does not have
+    const sh=M.sched[sid]||{e:{}}; const e2={...(sh.e||{})}; if(prevE) e2[wo]=prevE; else delete e2[wo]; M.sched[sid]={...sh,e:e2};
+    if(prevL) lastSaved[wo]=prevL; else delete lastSaved[wo]; invalidate(); render(); toast(`WO ${wo} 沒有存到，已還原，請再改一次`); }
 }
 $("#tbody").addEventListener("change",e=>{
   const t=e.target;
@@ -4166,9 +4172,11 @@ const LX=(()=>{
         const nums=[]; while((m=WO_RE.exec(body))) nums.push({wo:m[1],i:m.index});
         if(!nums.length){ const L2=body.match(/\b1\d{6}\b/g)||[]; L2.forEach(w=>nums.push({wo:w,i:body.indexOf(w)})); }
         for(const n of nums){ if(seen.has(n.wo)) continue; seen.add(n.wo);
-          const near=body.slice(Math.max(0,n.i-300),n.i+200); const tail=tailOf(near)||tailOf(body)||tailOf(M_.subject);
-          const mr=cardOfText(near)||cardOfText(body)||cardOfText(M_.subject);
-          let title=""; const tm=body.match(/執行\s*([A-Z][A-Z0-9 \/&\-]{2,60}?)\s*[\(（]/i)||body.match(/執行\s*([^\n，。,(（]{2,40})/); if(tm) title=tm[1].trim();
+          const near=body.slice(Math.max(0,n.i-300),n.i+200); const ls=body.lastIndexOf("\n",n.i)+1, le=body.indexOf("\n",n.i); const ln=body.slice(ls,le<0?body.length:le);
+          const tail=tailOf(ln)||tailOf(near)||tailOf(body)||tailOf(M_.subject);
+          const mr=cardOfText(ln)||cardOfText(near)||cardOfText(body)||cardOfText(M_.subject);
+          let title=""; { const c=cardOfText(ln); if(c){ const x=ln.slice(ln.toUpperCase().indexOf(c)+c.length).replace(/(DUE|到期)[\s\S]*$/i,"").replace(/^[\s\-–:：,，]+/,"").trim(); if(/[A-Z]{3,}/i.test(x)) title=x.slice(0,80); } }
+          const tm=title?null:body.match(/執行\s*([A-Z][A-Z0-9 \/&\-]{2,60}?)\s*[\(（]/i)||body.match(/執行\s*([^\n，。,(（]{2,40})/); if(tm) title=tm[1].trim();
           if(!title&&M_.subject) title=M_.subject.replace(/^(RE|FW)\s*[:：]\s*/i,"").replace(tail,"").trim().slice(0,80);
           const eng=near.match(/#\s*\d\s*ENG\s*[A-Z0-9]*/i)||near.match(/ENG\s*#\s*\d/i);
           const cancel=/CANCEL|取消|刪除|作廢/i.test(body.slice(Math.max(0,n.i-60),n.i+80));
@@ -4176,24 +4184,40 @@ const LX=(()=>{
       rows.push(...got); }
     const M0=mails(txt)[0]||{}; return {subject:M0.subject||"",from:M0.from||"",sentAt:M0.sentAt||"",rows}; }
   /* ---- 退工 ---- */
-  const RK=[[/料|PART|P\/N.*(未到|缺)|待料/i,"料"],[/工具|設備|TOOL|GSE/i,"工具"],[/人力|人手|MANPOWER/i,"人力"],[/天候|下雨|雷|颱風|WEATHER/i,"天候"],[/時間不足|工時|來不及|TIME/i,"時間"],[/不在場|離場|航班|調機|提早|延誤/i,"飛機"],[/前置|先行工作/i,"前置"],[/機坪|棚廠|空間|HANGAR/i,"空間"],[/不符|不一樣|不一致|疑慮|澄清|錯誤|有誤|內容/i,"不符"]];
+  const RK=[[/料|\bPARTS?\b|P\/N.*(未到|缺)|待料|庫存|沒料|無料|請購/i,"料"],[/工具|設備|TOOL|GSE|梯架|平台車|油車|轉接頭|DISK|IPCOM|USB/i,"工具"],[/人力|人手|MANPOWER|請假|病假/i,"人力"],[/天候|下雨|雨|雷|颱風|WEATHER/i,"天候"],[/時間不足|工時|來不及|TIME|足夠時間|時間不夠|干涉|拖上\s*GATE/i,"時間"],[/不在場|離場|航班|調機|提早|延誤/i,"飛機"],[/前置|先行工作/i,"前置"],[/機坪|棚廠|空間|HANGAR/i,"空間"],[/MEL|INOP|故障|FAULT/i,"MEL"],[/不符|不一樣|不一致|不同|相反|誤植|無法匹配|疑慮|澄清|錯誤|有誤|內容/i,"不符"]];
   function reasonPick(t,list){ for(const [re,k] of RK) if(re.test(t)){ const r=list.find(x=>x.includes(k)); if(r) return r; } return list.find(x=>/其他/.test(x))||"其他"; }
+  const pkgDate=s=>{ const m=String(s).match(/-\d{2}(\d{2})(\d{2})(\d{2})\b|STY\d{2}[-\/]B-?\d{5}-(\d{2})(\d{2})(\d{2})\b/i)||String(s).match(/-(\d{2})(\d{2})(\d{2})\b/); if(!m) return ""; const g=m.slice(1).filter(Boolean); return g.length>=3?`20${g[0]}-${g[1]}-${g[2]}`:""; };
+  const CJK=/[一-鿿]/;
+  // one mail can describe several aircraft ("A/C：B-58552 …" then "A/C：B-58508 …"): each A/C block is read on its own
+  function segs(t){ const L=t.split("\n"); const idx=L.map((l,i)=>/^\s*(A\/C|機號)\s*[:：]/i.test(l)?i:-1).filter(i=>i>=0); if(idx.length<2) return [t];
+    return idx.map((s,k)=>L.slice(k===0?0:s,k+1<idx.length?idx[k+1]:L.length).join("\n")); }
   function ret(txt,list){ const yr=new Date().getFullYear(); const rows=[];
-    for(const M_ of mails(txt)){ const t=M_.text; const y=(M_.sentAt||"").slice(0,4)||yr;
-      const woF=field(t,"WO\\s*NO\\.?|W/O|工單號碼|WO"); const card0=field(t,"TASK\\s*CARD\\s*(?:NO\\.?)?|MR|卡號|TASK\\s*ID");
-      const desc=block(t,"退工說明|退工原因|說明|REASON"), need=block(t,"後續需求|後續|需求|ACTION");
-      if(woF||/退工/.test(t)){ const wos=[...new Set((woF.match(/\d{6,8}/g)||[]))]; if(!wos.length){ let m; WO_RE.lastIndex=0; while((m=WO_RE.exec(t))) wos.push(m[1]); }
-        if(wos.length){ const dF=field(t,"DATE|日期|退工日期"); const d0=(dates(dF,y)[0]||{}).d||(M_.sentAt||"").slice(0,10)||"";
-          const cm=card0.toUpperCase().match(CARD_RE); const card=cm?cm.filter(isCard)[0]||"":cardOfText(t);
-          const title=card0&&card?card0.slice(card0.toUpperCase().indexOf(card)+card.length).replace(/^[\s\-–:：]+/,"").trim():"";
-          const tail=tailOf(field(t,"A\\/C|機號|TAIL|REG"))||tailOf(M_.subject)||tailOf(t);
-          const all=desc+" "+need; const clar=/工程|ENGINEER|TMC|澄清.*(LIST|工單|程序)/i.test(need||all)?"eng":/修管|MPS\s*(決定|評估)/i.test(need)?"mps":"none";
+    for(const M_ of mails(txt)){ const t=M_.text; const y=(M_.sentAt||"").slice(0,4)||yr; const seen=new Set(); let any=false;
+      const dMail=(dates(field(t,"DATE|日期|退工日期"),y)[0]||{}).d||pkgDate(t)||(M_.sentAt||"").slice(0,10)||"";
+      const descMail=block(t,"退工說明|退工原因|說明|REASON"), needMail=block(t,"後續需求|後續|需求|ACTION");
+      for(const S of segs(t)){ const L=S.split("\n"); const found=[];
+        L.forEach((l,i)=>{ let m; WO_RE.lastIndex=0; while((m=WO_RE.exec(l))) found.push({wo:m[1],i});
+          const f=l.match(/^\s*(?:WO\s*NO\.?|W\/O|工單號碼|WO)\s*[:：]\s*(.+)$/i); if(f) (f[1].match(/\d{6,8}/g)||[]).forEach(w=>found.push({wo:w,i})); });
+        if(!found.length) continue;
+        const sTail=tailOf(field(S,"A\\/C|機號|TAIL|REG")), single=segs(t).length<2;
+        let desc=block(S,"退工說明|退工原因|說明|REASON")||(single?descMail:""), need=block(S,"後續需求|後續|需求|ACTION")||(single?needMail:"");
+        if(!desc){ desc=L.filter(l=>CJK.test(l)&&!/^\s*(退工說明\s*[-—–]|HI\b|DEAR|謝謝|以上|寄件|主旨|收件|副本)/i.test(l)&&!/^\s*(A\/C|DATE|TASK|WO|TC)\b/i.test(l)).map(l=>l.trim()).join("；"); }
+        const dSeg=(dates(field(S,"DATE|日期|退工日期"),y)[0]||{}).d||pkgDate(S)||dMail;
+        const card0=field(S,"TASK\\s*CARD\\s*(?:NO\\.?)?|JOC\\s*CARD\\s*NO|TC|MR|卡號|TASK\\s*ID");
+        for(const f of found){ if(seen.has(f.wo)) continue; seen.add(f.wo); any=true;
+          // the card on the WO's own line, else the closest line above it in this block
+          let card=""; for(let k=f.i;k>=0&&!card;k--){ const cm=(L[k].toUpperCase().match(CARD_RE)||[]).filter(isCard); if(cm.length) card=cm[0]; }
+          if(!card){ const cm=(card0.toUpperCase().match(CARD_RE)||[]).filter(isCard); card=cm[0]||cardOfText(S)||cardOfText(M_.subject); }
+          let title=""; { const src=[L[f.i],card0].find(x=>x&&x.toUpperCase().includes(card))||""; if(card&&src) title=src.slice(src.toUpperCase().indexOf(card)+card.length).replace(/W\.?O\.?\s*(NO\.?)?\s*[:：]?\s*\d{6,8}(\/\d{1,2})?/ig,"").replace(/^[\s\-–:：,，\/]+/,"").replace(/[\s,，]+$/,"").trim(); }
+          const tail=sTail||tailOf(L[f.i])||tailOf(M_.subject)||tailOf(S);
+          const all=desc+" "+need; const reason=reasonPick(all.trim()?all:S,list);
+          const clar=/工程|ENGINEER|TMC|澄清.*(LIST|工單|程序)/i.test(need||all)?"eng":/修管|MPS\s*(決定|評估)/i.test(need)?"mps":/不符/.test(reason)?"eng":"none";
           const nd=(need.match(/(改排|重新安排|安排於|改至|延至)[^。]*/)||[""])[0]; const newDate=nd?((dates(nd,y)[0]||{}).d||""):"";
           const sq=x=>x.replace(/\s+/g," ").replace(/([^\x00-\x7F]) (?=[^\x00-\x7F])/g,"$1").trim(); let note=sq(desc); if(note.length>70) note=note.slice(0,68)+"…"; if(need) note+=(note?"；":"")+"需求："+sq(need).slice(0,50);
-          wos.forEach(wo=>rows.push({wo,card,title,tail,date:d0,reason:reasonPick(all||t,list),note,newDate,clar}));
-          continue; } }
+          rows.push({wo:f.wo,card,title,tail,date:dSeg,reason,note,newDate,clar}); } }
+      if(any) continue;
       // short lines: "1080519 B-58502 9/29 缺料，料 10/2 到"
-      for(const l of t.split("\n")){ const w=l.match(/\b(\d{6,8})(?:\/\d{1,2})?\b/); if(!w||/^\s*(寄件|From|Sent|主旨)/i.test(l)) continue; const D=dates(l,y);
+      for(const l of t.split("\n")){ const w=l.match(/\b(\d{6,8})(?:\/\d{1,2})?\b/); if(!w||/^\s*(寄件|From|Sent|主旨)/i.test(l)||seen.has(w[1])) continue; seen.add(w[1]); const D=dates(l,y);
         const rest=l.replace(w[0],"").replace(/B-?\d{5}/i,"").replace(/\d{1,2}\/\d{1,2}(\/\d{4})?/,"").trim();
         rows.push({wo:w[1],card:cardOfText(l),title:"",tail:tailOf(l),date:(D[0]||{}).d||(M_.sentAt||"").slice(0,10)||"",reason:reasonPick(l,list),note:rest.slice(0,60),newDate:/改排|改至|改到|延至|重排|排到/.test(l)?((D[D.length-1]||{}).d||""):"",clar:/澄清|不符/.test(l)?"eng":"none"}); } }
     return {rows}; }
