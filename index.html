@@ -1205,7 +1205,9 @@ const B={
     const merged={...cur,date,sty:{...(cur.sty||{}),...(patch.sty||{})},notes:{...(cur.notes||{}),...(patch.notes||{})},notices:{...(cur.notices||{}),...(patch.notices||{})},rt:{...(cur.rt||{}),...(patch.rt||{})}};
     for(const f of ["sty","notes","notices","rt"]) for(const k of Object.keys(patch[f]||{})) if(patch[f][k]===null) delete merged[f][k];
     M.daily[id]=merged; invalidate();
-    if(mode==="db") return q("daily/"+id,()=>withRetry(()=>db.doc("daily/"+id).set(merged))).catch(dbFail);
+    // send only what changed, entry by entry: two planners marking the same day at once no longer overwrite each other
+    if(mode==="db"){ const up={date}; for(const f of ["sty","notes","notices","rt"]) for(const [k,v] of Object.entries(patch[f]||{})) (up[f]=up[f]||{})[k]=v===null?{__delete__:true}:{...v,__set__:true};
+      return q("daily/"+id,()=>withRetry(()=>db.doc("daily/"+id).update(up))).catch(dbFail); }
     persistLocal();
   },
   async addLog(doc){ const id=uid(); if(mode==="db") return withRetry(()=>db.doc("logs/"+id).set(doc)).catch(()=>{}); M.logs[id]=doc; persistLocal(); },
@@ -1397,7 +1399,8 @@ function derive(){
   const doneMap={};
   Object.values(M.done).sort((a,b)=>((a.manual?"0":"1")+(a.at||""))<((b.manual?"0":"1")+(b.at||""))?-1:1).forEach(b=>{ for(const [wo,d] of Object.entries(b.recs||{})){ if(b.manual&&!d) continue; doneMap[wo]=b.manual?{date:d,file:b.file,at:(b.who||{})[wo]&&b.who[wo].at||b.at,manual:true,mBy:(b.who||{})[wo]&&b.who[wo].by||""}:{date:d||"",file:b.file,at:b.at}; } });
   // completions by aircraft + task card: "B-58201|A2-49-2020-01" -> [{sn,date,wo,file}]
-  const cardDone={}; for(const b of Object.values(M.done)) if(!b.manual) for(const [tl,card,sn,d,wo,cd,pd] of (b.cards||[])) (cardDone[tl+"|"+card]=cardDone[tl+"|"+card]||[]).push({sn,date:pd||d,signed:d,wo,due:cd||"",file:b.file,at:b.at});
+  const cardDone={}; for(const b of Object.values(M.done)) if(!b.manual){ for(const [tl,card,sn,d,wo,cd,pd] of (b.cards||[])) (cardDone[tl+"|"+card]=cardDone[tl+"|"+card]||[]).push({sn,date:pd||d,signed:d,wo,due:cd||"",file:b.file,at:b.at});
+    for(const [tl,rows] of Object.entries(b.cardsT||{})) for(const [card,sn,d,wo,cd,pd] of rows) (cardDone[tl+"|"+card]=cardDone[tl+"|"+card]||[]).push({sn:sn||"",date:pd||d,signed:d,wo,due:cd||"",file:b.file,at:b.at}); }   // cardsT: 整理後的完工歷史（依機號分組）
   // a WO matched by number counts on its package date too (signed after midnight / in UTC → still the package day)
   { const pdOf={}; for(const L of Object.values(cardDone)) for(const c of L) if(c.date!==c.signed) pdOf[c.wo+"|"+c.signed]=c.date;
     for(const [wo,d] of Object.entries(doneMap)) if(!d.manual&&pdOf[wo+"|"+d.date]) doneMap[wo]={...d,date:pdOf[wo+"|"+d.date],signed:d.date}; }
@@ -1580,8 +1583,8 @@ function derive(){
   const usedSrc=new Set(Object.values(doneMap).filter(d=>d.via==="card").map(d=>d.srcWo));
   const shortKeys=new Set(); for(const sd of Object.values(M.short||{})) for(const it of Object.values(sd.items||{})) shortKeys.add(sd.tail+"|"+String(it.task||"").trim().toUpperCase());
   const woShort=new Set(); for(const [k,L] of Object.entries(cardDone)) if(shortKeys.has(k)) L.forEach(c=>woShort.add(c.wo));
-  const xinfo={}; for(const b of Object.values(M.done)) Object.assign(xinfo,b.xinfo||{});
-  const extras=Object.entries(doneMap).filter(([wo,v])=>!reg[wo]&&!v.via&&!usedSrc.has(wo)&&!woShort.has(wo)).map(([wo,v])=>{ const x=xinfo[wo]||[]; return {wo,...v,tail:x[0]||"",mr:x[1]||"",title:x[2]||"",ttype:x[3]||""}; });
+  const xinfo={}; let xcut=""; for(const b of Object.values(M.done)){ Object.assign(xinfo,b.xinfo||{}); if(b.xcut&&b.xcut>xcut) xcut=b.xcut; }
+  const extras=Object.entries(doneMap).filter(([wo,v])=>!reg[wo]&&!v.via&&!usedSrc.has(wo)&&!woShort.has(wo)&&!(xcut&&!xinfo[wo]&&(v.date||"")<xcut)).map(([wo,v])=>{ const x=xinfo[wo]||[]; return {wo,...v,tail:x[0]||"",mr:x[1]||"",title:x[2]||"",ttype:x[3]||""}; });
   const removed=Object.values(reg).filter(w=>w.removed);
   shortRows.sort((a,b)=>(a.left??9999)-(b.left??9999)||a.tail.localeCompare(b.tail));
   cache={all,extras,removed,doneMap,reg,resolved,shortRows,hmvOn,cardDone};
@@ -2592,6 +2595,57 @@ function mapDoneDlg(wb,g,name){
     d.querySelector("[data-y]").onclick=()=>{const wo=+d.querySelector("#mWo").value,date=+d.querySelector("#mDate").value,st=+d.querySelector("#mSt").value,stVal=d.querySelector("#mStV").value.trim(),tail=+d.querySelector("#mTail").value,card=+d.querySelector("#mCard").value,card2=+d.querySelector("#mCard2").value; closeDlg(); res({...g,wo,date,st,stVal,tail,card,card2});};
   });
 }
+/* ---------- 整理完工歷史：合併較舊的完工匯入（同一份資料、檔案小很多），完工判定不變 ---------- */
+function doneSnap(){ invalidate(); const D=derive(); const st={}; for(const w of D.all) st[w.wo]=[w.st,w.doneDate||"",w.doneVia||"",w.srcWo||""];
+  const sh={}; for(const r of D.shortRows) sh[r.tail+"|"+r.key]=String(r.last||"")+"|"+String(r.next||"");
+  return {st,sh,extras:D.extras.length,bytes:JSON.stringify(M.done).length}; }
+function compactBuild(cutAt,keepDays){
+  const olds=Object.entries(M.done).filter(([id,b])=>!b.manual&&!id.startsWith("__")&&(b.at||"")<cutAt).sort((a,b)=>(a[1].at||"")<(b[1].at||"")?-1:1);
+  if(olds.length<2&&!(olds.length===1&&!olds[0][1].hist)) return null;
+  const recs={}, xin={}, seen=new Set(), byT={}; let at="";
+  for(const [,b] of olds){ if((b.at||"")>at) at=b.at; for(const [wo,d] of Object.entries(b.recs||{})) recs[wo]=d; Object.assign(xin,b.xinfo||{});
+    const add=(tl,card,sn,d,wo,cd,pd)=>{ const r=[card,sn||"",d,wo,cd||"",...(pd&&pd!==d?[pd]:[])]; while(r.length>4&&!r[r.length-1]) r.pop(); const k=tl+"|"+r.join("|"); if(seen.has(k)) return; seen.add(k); (byT[tl]=byT[tl]||[]).push(r); };
+    for(const [tl,card,sn,d,wo,cd,pd] of (b.cards||[])) add(tl,card,sn,d,wo,cd,pd);
+    for(const [tl,rows] of Object.entries(b.cardsT||{})) for(const [card,sn,d,wo,cd,pd] of rows) add(tl,card,sn,d,wo,cd,pd); }
+  // extras (routine work outside the monthly plan) keep their description for 60 days; older ones drop out of the 計畫外完工 list
+  const xcut=iso(new Date(Date.now()-(keepDays||30)*DAY)), reg=derive().reg; const xkeep={}; for(const [wo,x] of Object.entries(xin)) if(reg[wo]||(recs[wo]||"")>=xcut) xkeep[wo]=x;
+  const stamp=todayISO().replace(/-/g,"")+"-"+uid(), base={hist:true,file:"完工歷史（整理）",at,by:me&&me.id||"",xcut}; const docs={};
+  const RK=Object.keys(recs), RC=8000; for(let i=0;i<RK.length;i+=RC){ const p={}; RK.slice(i,i+RC).forEach(k=>p[k]=recs[k]); docs[`hist-${stamp}-r${i/RC}`]={...base,recs:p}; }
+  let cur={}, n=0, j=0; const flush=()=>{ if(n){ docs[`hist-${stamp}-c${j++}`]={...base,recs:{},cardsT:cur}; cur={}; n=0; } };
+  for(const [tl,rows] of Object.entries(byT)){ if(n+rows.length>3000) flush(); cur[tl]=rows; n+=rows.length; } flush();
+  const XK=Object.keys(xkeep), XC=2500; for(let i=0;i<XK.length;i+=XC){ const p={}; XK.slice(i,i+XC).forEach(k=>p[k]=xkeep[k]); docs[`hist-${stamp}-x${i/XC}`]={...base,recs:{},xinfo:p}; }
+  return {olds:olds.map(([id])=>id),files:[...new Set(olds.map(([,b])=>b.file))],docs,at};
+}
+function compactDlg(){
+  const imps=[...new Map(Object.values(M.done).filter(b=>!b.manual).map(b=>[b.file+"|"+b.at,b])).values()].sort((a,b)=>(a.at||"")<(b.at||"")?-1:1);
+  const def=iso(new Date(Date.now()-7*DAY));
+  const d=openDlg(`<h3>整理完工歷史</h3><p>把下列日期<b>之前匯入</b>的完工檔合併成一份精簡的歷史資料（同一張 WO 只留一筆、去除重複的卡號紀錄）。月計畫、臨時工單的完工紀錄全部保留；例行檢查等「計畫外完工」清單只留近期。之後匯入的完工檔不受影響，仍可個別重新匯入。</p>
+    <div class="row"><label for="cpCut">整理這天之前的匯入</label><input type="date" id="cpCut" value="${def}" max="${todayISO()}" style="padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2)"></div>
+    <div class="row"><label for="cpKeep">計畫外完工保留</label><input type="number" id="cpKeep" value="30" min="7" max="365" style="width:80px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2)"> 天</div>
+    <div id="cpInfo" style="font-size:13px"></div><div id="cpWarn"></div>
+    <div class="foot"><button class="btn" data-n>取消</button><button class="btn" id="cpChk">先比對</button><button class="btn primary" data-y disabled>整理並寫入</button></div>`);
+  let plan=null, ok=false;
+  const info=()=>{ const cut=d.querySelector("#cpCut").value; const L=imps.filter(b=>(b.at||"")<cut+"T00:00"); ok=false; d.querySelector("[data-y]").disabled=true; d.querySelector("#cpWarn").innerHTML="";
+    d.querySelector("#cpInfo").innerHTML=L.length?`<p>會合併 ${L.length} 次匯入：</p><ul style="margin:4px 0 0 18px;max-height:180px;overflow:auto">${L.map(b=>`<li>${esc(b.file)}　<span class="muted">${esc(fmtT(b.at))}</span></li>`).join("")}</ul>`:`<p class="muted">這天之前沒有可整理的匯入。</p>`; };
+  d.querySelector("#cpCut").onchange=info; d.querySelector("#cpKeep").onchange=info; info();
+  d.querySelector("[data-n]").onclick=closeDlg;
+  d.querySelector("#cpChk").onclick=()=>{ const cut=d.querySelector("#cpCut").value+"T00:00"; plan=compactBuild(cut,Math.min(365,Math.max(7,+d.querySelector("#cpKeep").value||30)));
+    if(!plan){ d.querySelector("#cpWarn").innerHTML=`<p class="muted">沒有需要整理的資料。</p>`; return; }
+    const before=doneSnap(); const keep=M.done; const next={}; for(const [id,b] of Object.entries(keep)) if(!plan.olds.includes(id)) next[id]=b; Object.assign(next,plan.docs);
+    M.done=next; let after; try{ after=doneSnap(); } finally{ M.done=keep; invalidate(); }
+    const diff=Object.keys({...before.st,...after.st}).filter(wo=>JSON.stringify(before.st[wo])!==JSON.stringify(after.st[wo]));
+    const sdiff=Object.keys({...before.sh,...after.sh}).filter(k=>before.sh[k]!==after.sh[k]);
+    const kb=x=>Math.round(x/1024).toLocaleString()+" KB";
+    if(diff.length||sdiff.length){ d.querySelector("#cpWarn").innerHTML=`<p style="color:var(--red);font-size:13px">比對發現 ${diff.length} 張工單、${sdiff.length} 項短天期結果會改變，為安全起見不整理：${esc([...diff,...sdiff].slice(0,8).join("、"))}</p>`; return; }
+    ok=true; d.querySelector("[data-y]").disabled=false;
+    d.querySelector("#cpWarn").innerHTML=`<p style="color:var(--green);font-size:13px">✓ 比對通過：${Object.keys(before.st).length} 張工單的完工狀態、完工日期與短天期上次完工全部不變。<br>完工資料 ${kb(before.bytes)} → ${kb(after.bytes)}；計畫外完工清單 ${before.extras} → ${after.extras} 筆（只留近 ${esc(d.querySelector("#cpKeep").value)} 天）。</p>`; };
+  d.querySelector("[data-y]").onclick=async()=>{ if(!ok||!plan) return; d.querySelector("[data-y]").disabled=true; d.querySelector("#cpWarn").innerHTML+=`<p class="muted">寫入中…</p>`;
+    try{ for(const [id,doc] of Object.entries(plan.docs)) await B.addDone(id,doc);          // new copy first, then remove the old ones
+      for(const id of plan.olds){ if(mode==="db") await q("done/"+id,()=>withRetry(()=>db.doc("done/"+id).delete())); delete M.done[id]; }
+      if(mode!=="db") persistLocal(); B.addLog({kind:"整理完工歷史",file:plan.files.join("、").slice(0,200),n:plan.olds.length,at:new Date().toISOString(),by:me&&me.id||""});
+      closeDlg(); invalidate(); render(); toast(`已整理 ${plan.olds.length} 份完工資料`); }
+    catch(e){ showMsg("整理未完成",`<p>${esc(e&&e.message||e)}。已寫入的新資料與舊資料內容相同，不影響判定；請稍後再按一次「整理完工歷史」。</p>`); } };
+}
 function settingsDlg(){
   const months=[...new Set(Object.values(M.plans).map(p=>p.month))].sort();
   const d=openDlg(`<h3>設定</h3>
@@ -2604,10 +2658,12 @@ function settingsDlg(){
     ${isOwner&&mode==="db"?`<div class="row"><label>使用者名單</label><button class="btn" id="sMem">管理開放名單${Object.keys(M.joins||{}).length?`（${Object.keys(M.joins).length} 位申請中）`:""}</button></div>`:""}
     <details class="more"><summary>資料管理</summary><div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
       <div class="row"><label for="sDelM">刪除某月計畫</label><select id="sDelM"><option value="">選擇月份</option>${months.map(m=>`<option value="${m}">${m.replace("-","/")}</option>`).join("")}</select><button class="btn danger" id="sDel">刪除</button></div>
-      <p style="font-size:12.5px">只在匯錯月份、或資料庫將滿時使用。刪除前請先匯出管控檔備份。</p></div></details>
+      <p style="font-size:12.5px">只在匯錯月份、或資料庫將滿時使用。刪除前請先匯出管控檔備份。</p>
+      ${isOwner?`<div class="row"><label>完工歷史</label><button class="btn" id="sCompact">整理完工歷史</button></div><p style="font-size:12.5px">合併較舊的完工匯入、去除重複，計畫外完工清單只留近期，讓開啟更快。整理前會自動比對，所有工單的完工狀態都不變才寫入。</p>`:""}</div></details>
     <div class="foot"><button class="btn" data-n>取消</button><button class="btn primary" data-y>儲存</button></div>`);
   d.querySelector("[data-n]").onclick=closeDlg;
   const sm=d.querySelector("#sMem"); if(sm) sm.onclick=()=>{ closeDlg(); membersDlg(); };
+  const sc=d.querySelector("#sCompact"); if(sc) sc.onclick=()=>{ closeDlg(); compactDlg(); };
   d.querySelector("[data-y]").onclick=async()=>{
     const cfg={...M.config,stationDays:Math.min(60,Math.max(1,+d.querySelector("#sStn").value||14)),soonDays:Math.max(1,+d.querySelector("#sSoon").value||7),windowMonths:Math.min(24,Math.max(2,+d.querySelector("#sWin").value||6)),roster:d.querySelector("#sRules").value.trim()||defaultConfig.roster,
       retReasons:d.querySelector("#sRet").value.trim()||defaultConfig.retReasons,fixTypes:d.querySelector("#sChg").value.trim()||defaultConfig.fixTypes};
@@ -2652,9 +2708,14 @@ let tt; function toast(t){let el=$(".toast"); if(!el){el=document.createElement(
 /* =====================================================================
    EXPORT
    ===================================================================== */
-async function exportXlsx(part){
+async function exportXlsx(part,opt){
   if(!window.XLSX){toast("Excel 元件尚未載入");return;}
-  const {all,extras,removed}=derive(); const L=all.slice().sort(cmpDue);
+  opt=opt||{}; const cur=todayISO().slice(0,7), nxt=monthAdd(cur,1), recentMo=w=>w.month>=cur&&w.month<=nxt;
+  let {all,extras,removed}=derive(); let older=[];
+  // 近期版：只放本月＋下月（整月完整，可還原這兩個月）；更早月份的未完工另列一張表，計畫外完工只留近 60 天
+  if(opt.recent){ older=all.filter(w=>!recentMo(w)&&w.st!=="done"&&!w.removed); all=all.filter(recentMo); removed=removed.filter(recentMo);
+    const cut=iso(new Date(Date.now()-60*DAY)); extras=extras.filter(x=>(x.date||"")>=cut); }
+  const L=all.slice().sort(cmpDue);
   const head=["狀態","來源","可執行起日","寄件人","發信時間","主旨","WO","機號","機型","計畫月份","Pkg Task Type","Task ID","Pkg ID","Task Serial","Config Address","Task Part","MR/Deferral","MR Period","Task Title","DUE DATE","剩餘天數","排定日期","計畫備註","排定人","完工日期","退工次數","最近退工","退工進度","REMARK","長工時","來源檔案","已確認移除"];
   const row=w=>[ST[w.st].t+(w.fromNoWo?"（原無WO）":""),w.adhoc?"臨時":w.alsoAdhoc?"月計畫+臨時":"月計畫",fmtD(w.start||""),w.sender||"",w.sentAt?fmtD(w.sentAt.slice(0,10))+" "+w.sentAt.slice(11,16):"",w.subject||w.src||"",w.wo,w.tail,w.type,w.month,w.pkgType||"",w.taskId||"",w.pkgId||"",w.serial||"",w.config||"",w.part||"",w.mr||"",w.period||"",w.title||"",w.due?fmtD(w.due):(w.dueRaw||""),w.left==null?"":w.left,fmtD(w.sched),w.note,w.schedBy?who(w.schedBy):"",fmtD(w.doneDate),w.retN||"",w.lastRet?fmtD(w.lastRet.date)+" "+(w.lastRet.reason||"")+(w.lastRet.note?"："+w.lastRet.note:""):"",w.lastRet?retProgress({...w.lastRet,wo:w.wo}).t:"",w.remark||"",w.longHr?"長工時":"",w.file||"",""];
   const fill={over:"F1E0DB",past:"F5E3D6",soon:"F2E8D6",nowo:"F3E3D3",miss:"EAE2EC",todo:"ECE6DF",queue:"ECE9E4",sched:"DFE7E8",done:"E4EADF",hmv:"ECE8F2"}, font={over:"9A4F46",past:"9A5A30",soon:"86683A",nowo:"8A5A3A",miss:"6E5A76",todo:"6D635B",queue:"8A8078",sched:"52707A",done:"587352",hmv:"5E5476"};
@@ -2678,6 +2739,7 @@ async function exportXlsx(part){
   }
   XLSX.utils.book_append_sheet(wb,sheet(L,true),"管控總表");
   XLSX.utils.book_append_sheet(wb,sheet(L.filter(w=>["over","past","soon","miss","todo"].includes(w.st)||w.late),false),"待處理");
+  if(older.length) XLSX.utils.book_append_sheet(wb,sheet(older.slice().sort(cmpDue),false),"前月未完工");
   const byTail={}; for(const w of L){const k=w.tail; const t=byTail[k]=byTail[k]||{type:w.type,over:0,past:0,soon:0,miss:0,todo:0,sched:0,done:0,n:0}; t[w.st]=(t[w.st]||0)+1; t.n++;}
   const sa=[["機號","機型","總數","已逾期","排定已過","快屆期","檔案中消失","待安排","已排定","已完工","完工率"]];
   Object.keys(byTail).sort().forEach(k=>{const t=byTail[k]; sa.push([k,t.type,t.n,t.over,t.past,t.soon,t.miss,t.todo,t.sched,t.done,t.n?Math.round(t.done/t.n*100)+"%":""]);});
@@ -2695,15 +2757,15 @@ async function exportXlsx(part){
     if(sr.length>1){ const ws_=XLSX.utils.aoa_to_sheet(sr); ws_["!cols"]=[9,6,11,11,30,14].map(w=>({wch:w})); hdr(ws_,sr[0].length); XLSX.utils.book_append_sheet(wb,ws_,"駐站紀錄"); } }
   { const hr=[["機號","事件ID","進廠日","預計 RELEASE","RELEASED","備註","併入工單"]]; for(const h of Object.values(M.hmv||{})) for(const ev of (h.events||[])) hr.push([h.tail,ev.id,fmtD(ev.start),fmtD(ev.end),fmtD(ev.released||""),ev.note||"",(ev.wos||[]).join(",")]);
     if(hr.length>1){ const wh=XLSX.utils.aoa_to_sheet(hr); wh["!cols"]=[9,14,11,11,11,30,60].map(w=>({wch:w})); hdr(wh,hr[0].length); XLSX.utils.book_append_sheet(wb,wh,"HMV 紀錄"); } }
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([["soonDays",M.config.soonDays],["windowMonths",M.config.windowMonths],["roster",M.config.roster||defaultConfig.roster],["exportedAt",new Date().toISOString()]]),"_設定");
-  return saveWb(wb,`月維修計畫管控_${todayISO().replace(/-/g,"")}.xlsx`);
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([["soonDays",M.config.soonDays],["windowMonths",M.config.windowMonths],["roster",M.config.roster||defaultConfig.roster],["exportedAt",new Date().toISOString()],...(opt.recent?[["range",cur+"~"+nxt]]:[])]),"_設定");
+  return saveWb(wb,`月維修計畫管控_${opt.recent?"近期_":""}${todayISO().replace(/-/g,"")}.xlsx`);
 }
 async function saveWb(wb,name){
-  const out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+  const out=XLSX.write(wb,{bookType:"xlsx",type:"array",compression:true});
   try{
     const dl=window.claude&&window.claude.use?await window.claude.use("downloads"):null;
     if(dl){ await dl.save({filename:name,data:new Blob([out])}); toast("已下載："+name); return; }
-    if(!window.claude){ XLSX.writeFile(wb,name); return; }
+    if(!window.claude){ XLSX.writeFile(wb,name,{compression:true}); return; }
     showMsg("無法下載","<p>這個檢視畫面不允許下載檔案。請在 claude.ai 網頁或桌面 App 中開啟此頁再匯出。</p>");
   }catch(e){ if(e&&e.code==="declined") toast("已取消下載"); else showMsg("下載失敗",`<p>${esc(e&&e.message||e)}</p>`); }
 }
@@ -2779,6 +2841,75 @@ async function exportReturns(mo,to){   // 單月：exportReturns("2026-09")；�
   const hdr=(ws,n)=>{for(let c=0;c<n;c++){ const r=XLSX.utils.encode_cell({r:0,c}); if(ws[r]) ws[r].s={font:{bold:true,color:{rgb:"FFFFFF"}},fill:{fgColor:{rgb:"8C7266"}}};}};
   const wb=XLSX.utils.book_new(); retSheets(wb,RR,hdr,`${lab} 退工統計${ui.tail||ui.type?"（"+(ui.tail||ui.type)+"）":""}`);
   return saveWb(wb,`退工紀錄_${(ui.tail||ui.type)?(ui.tail||ui.type)+"_":""}${fn}.xlsx`);
+}
+/* 考核統計：把系統已記下的異動（排定、改排、回報完工、退工…）依期間彙總，考核時直接引用 */
+async function exportReview(from,to){
+  if(!window.XLSX){toast("Excel 元件尚未載入");return;}
+  if(to<from){ const t=from; from=to; to=t; }
+  let AU=Object.values(M.audit||{});
+  if(mode==="db"&&from<iso(new Date(Date.now()-89*DAY))){ try{ const sn=await db.collection("audit").where("day",">=",from).get(); AU=sn.docs.map(x=>x.data()); }catch(e){} }
+  const ev=[]; for(const d of AU) for(const e of Object.values(d.e||{})){ const day=(e.at?iso(new Date(e.at)):d.day)||d.day; if(day>=from&&day<=to) ev.push({...e,day}); }
+  ev.sort((a,b)=>(a.at||"")<(b.at||"")?-1:1);
+  const first=AU.map(d=>d.day).filter(Boolean).sort()[0]||"";
+  const months=[]; for(let m=from.slice(0,7);m<=to.slice(0,7);m=monthAdd(m,1)) months.push(m);
+  const inP=d=>d&&d>=from&&d<=to, moOf=d=>(d||"").slice(0,7);
+  const people=[...new Set(ev.map(e=>e.by).filter(Boolean))];
+  // what each audit action means for the review
+  const K=[
+    ["新排定工單",e=>e.act==="排定日期"&&!e.from&&e.to],
+    ["改排（調整排定日期）",e=>e.act==="排定日期"&&e.from&&e.to&&e.from!==e.to],
+    ["取消排定",e=>e.act==="排定日期"&&e.from&&!e.to],
+    ["回報完工（每日核對派工）",e=>e.act==="回報完工"],
+    ["例行／STAYOVER 已執行確認",e=>/^(例行已執行|STAYOVER 已執行)$/.test(e.act)],
+    ["短天期上次完工更新",e=>/^短天期/.test(e.act)],
+    ["新增臨時工單",e=>e.act==="新增臨時工單"],
+    ["刪除重複／取消工單（避免重複派工）",e=>e.act==="刪除工單"||e.act==="信件取消工單"],
+    ["到期日確認／調整",e=>e.act==="到期日"],
+    ["暫緩（待料／待澄清）",e=>e.act==="暫緩"],
+    ["計畫備註（RMQ、料件、注意事項）",e=>e.act==="計畫備註"||e.act==="注意事項"],
+    ["駐站／航班／HMV 更新",e=>/^(駐站|匯入航班|HMV)/.test(e.act)],
+    ["退工登錄",e=>e.act==="退工"],
+    ["退工追蹤（澄清進度）",e=>e.act==="退工進度"],
+    ["改工單（請工程修正）",e=>e.act==="改工單"||e.act==="改工單進度"],
+  ];
+  const cnt=(f,L)=>L.filter(f).length;
+  const workDays=new Set(ev.filter(e=>/排定日期|回報完工|例行|STAYOVER|短天期|退工/.test(e.act)).map(e=>e.day)).size;
+  // plan / completion / man-hours by month and fleet
+  const {all}=derive(); const TY=["A321","A330","A359","A351"];
+  const planOf=(m,t)=>all.filter(w=>w.month===m&&(!t||w.type===t)&&!w.noWo);
+  const doneIn=(m,t)=>all.filter(w=>w.st==="done"&&moOf(w.doneDate)===m&&inP(w.doneDate)&&(!t||w.type===t));
+  const mh=L=>{ let s_=0,n=0; for(const w of L){ const v=mhOf(w); if(v>0) s_+=v; else n++; } return [Math.round(s_*10)/10,n]; };
+  const RR=recList("returns").filter(x=>inP(x.date)), CC=recList("changes").filter(x=>x.kind==="fix"&&inP(x.date));
+  const H=(t)=>[[t,""]];
+  const sum=[["考核統計",`${fmtD(from)}～${fmtD(to)}`],["匯出時間",fmtT(new Date().toISOString())],
+    ["說明",first&&first>from?`系統異動紀錄自 ${fmtD(first)} 起才有，之前的期間沒有逐筆紀錄。`:"依系統逐筆異動紀錄統計。"],[],
+    ["目標1　依 MONTHLY 控管表控管，避免漏排工／重複派工",""],["有核對／排工紀錄的工作日",workDays],
+    ...K.slice(0,12).map(([t,f])=>[t,cnt(f,ev)]),[],
+    ["目標2　依月計畫派工＋全機型工時",""],
+    ...months.flatMap(m=>{ const P=planOf(m), D=doneIn(m); const [ph,pn]=mh(P), [dh,dn]=mh(D); return [[`${m.replace("-","/")} 月計畫工單`,P.length],[`${m.replace("-","/")} 期間內完工`,D.length],[`${m.replace("-","/")} 計畫工時（MH）`,ph+(pn?`（${pn} 張無工時資料）`:"")],[`${m.replace("-","/")} 完工工時（MH）`,dh+(dn?`（${dn} 張無工時資料）`:"")]]; }),
+    [],["目標3　退工分析與表格優化",""],["退工件數",RR.length],["A321 退工",RR.filter(x=>x.type==="A321").length],["A330 退工",RR.filter(x=>x.type==="A330").length],
+    ["退工追蹤（澄清進度）",cnt(K[13][1],ev)],["改工單（請工程修正）",CC.length],
+    ...(()=>{ const m={}; RR.forEach(x=>{ const k=x.reason||"未填"; m[k]=(m[k]||0)+1; }); return Object.entries(m).sort((a,b)=>b[1]-a[1]).map(([k,v])=>["　原因："+k,v]); })()];
+  const hdr=(ws,n)=>{for(let c=0;c<n;c++){ const r=XLSX.utils.encode_cell({r:0,c}); if(ws[r]) ws[r].s={font:{bold:true,color:{rgb:"FFFFFF"}},fill:{fgColor:{rgb:"8C7266"}}};}};
+  const wb=XLSX.utils.book_new();
+  const s1=XLSX.utils.aoa_to_sheet(sum); s1["!cols"]=[{wch:36},{wch:26}];
+  sum.forEach((r,i)=>{ if(/^目標|^考核統計/.test(r[0]||"")){ const c=XLSX.utils.encode_cell({r:i,c:0}); if(s1[c]) s1[c].s={font:{bold:true,sz:12,color:{rgb:"8C7266"}}}; } });
+  XLSX.utils.book_append_sheet(wb,s1,"摘要");
+  // month × action, so the trend is visible (以利逐月比較)
+  const mm=[["項目",...months.map(m=>m.replace("-","/")),"合計",...people.map(p=>who(p))],
+    ...K.map(([t,f])=>{ const L=ev.filter(f); return [t,...months.map(m=>L.filter(e=>moOf(e.day)===m).length),L.length,...people.map(p=>L.filter(e=>e.by===p).length)]; })];
+  const s2=XLSX.utils.aoa_to_sheet(mm); s2["!cols"]=[{wch:34},...mm[0].slice(1).map(()=>({wch:9}))]; hdr(s2,mm[0].length); XLSX.utils.book_append_sheet(wb,s2,"每月工作量");
+  // man-hours by fleet
+  const mr=[["月份","機型","月計畫工單","計畫工時 MH","期間內完工","完工工時 MH","完工率","長工時工單","無工時資料"]];
+  for(const m of months) for(const t of TY){ const P=planOf(m,t), D=doneIn(m,t); const [ph,pn]=mh(P), [dh]=mh(D); const doneP=P.filter(w=>w.st==="done").length;
+    mr.push([m.replace("-","/"),t,P.length,ph,D.length,dh,P.length?Math.round(doneP/P.length*100)+"%":"",P.filter(w=>w.longHr||mhOf(w)>=4).length,pn]); }
+  const s3=XLSX.utils.aoa_to_sheet(mr); s3["!cols"]=mr[0].map(()=>({wch:11})); hdr(s3,mr[0].length); XLSX.utils.book_append_sheet(wb,s3,"每月工時");
+  if(RR.length) retSheets(wb,RR,hdr,`${fmtD(from)}～${fmtD(to)} 退工統計`);
+  // every logged change, for evidence
+  const ar=[["日期","時間","人員","動作","WO","機號","原本","改為"],...ev.map(e=>[fmtD(e.day),fmtT(e.at).slice(11),who(e.by),e.act||"",e.wo||"",e.tail||"",e.from||"",String(e.to||"")])];
+  const s4=XLSX.utils.aoa_to_sheet(ar); s4["!cols"]=[11,6,8,14,10,9,14,50].map(w=>({wch:w})); hdr(s4,ar[0].length); if(ar.length>1) s4["!autofilter"]={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:ar.length-1,c:ar[0].length-1}})};
+  XLSX.utils.book_append_sheet(wb,s4,"異動明細");
+  return saveWb(wb,`考核統計_${from.replace(/-/g,"")}-${to.replace(/-/g,"")}.xlsx`);
 }
 function extrasDlg(){
   const all=derive().extras; const st={ty:"",tail:ui.tail||"",q:""};
@@ -2924,7 +3055,9 @@ function exportDlg(){
   const view=filtered(all); const hasFilter=!!(ui.check||ui.status||ui.q||ui.month||ui.pkg||ui.src||ui.hideDone);
   const viewLab=ui.check?(checksOf(all).find(c=>c.k===ui.check)||{}).t:ui.status?ST[ui.status].t:ui.q?`搜尋「${ui.q}」`:"目前篩選";
   const d=openDlg(`<h3>匯出</h3>
-    <div class="exp-opt"><label><input type="radio" name="xMode" value="full" checked> <b>完整管控檔</b></label><p>全部工單＋短天期清單、退工、改工單紀錄。可用來備份與還原。</p></div>
+    ${(()=>{ const cur=todayISO().slice(0,7), nxt=monthAdd(cur,1), nR=all.filter(w=>w.month>=cur&&w.month<=nxt).length, nO=all.filter(w=>w.month<cur&&w.st!=="done"&&!w.removed).length;
+      return `<div class="exp-opt"><label><input type="radio" name="xMode" value="recent" checked> <b>近期管控檔（${cur.replace("-","/")}＋${nxt.replace("-","/")}）</b>（${nR} 筆${nO?`＋前月未完工 ${nO} 筆`:""}）</label><p>平常寄送、手機開啟用，檔案小很多。這兩個月可用來還原；更早月份的未完工另列一張表。</p></div>`; })()}
+    <div class="exp-opt"><label><input type="radio" name="xMode" value="full"> <b>完整管控檔</b>（${all.length} 筆）</label><p>全部月份工單＋短天期清單、退工、改工單紀錄。月底備份與還原用，檔案較大。</p></div>
     ${hasFilter?`<div class="exp-opt"><label><input type="radio" name="xMode" value="view"> <b>目前畫面：${esc(viewLab)}</b>（${view.length} 筆）</label><p>跟下方工單列表看到的一樣${scope?"，範圍 "+esc(scope):""}。</p></div>`:""}
     <div class="exp-opt"><label><input type="radio" name="xMode" value="st"> <b>依狀態匯出</b>${scope?`（範圍：${esc(scope)}）`:""}</label>
       <div class="xst">${order.map(k=>{const n=cnt(k); return `<label class="chip ${n?"":"dim"}"><input type="checkbox" value="${k}" ${k==="over"?"checked":""}> ${ST[k].t} <span class="ct">${n}</span></label>`;}).join("")}</div>
@@ -2936,8 +3069,13 @@ function exportDlg(){
           <label style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><input type="radio" name="xRetK" value="m" checked> 單月 <select id="xRetM" ${sel_} aria-label="退工月份">${ms.map(m=>opt(m)).join("")}</select></label>
           <label style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><input type="radio" name="xRetK" value="r"> 區間 <select id="xRetF" ${sel_} aria-label="起始月份">${ms.slice().reverse().map((m,i)=>opt(m,i===0)).join("")}</select> 至 <select id="xRetT" ${sel_} aria-label="結束月份">${ms.map((m,i)=>opt(m,i===0)).join("")}</select> <span id="xRetN" class="muted" style="font-size:12.5px"></span></label>
         </div><p>每筆退工的原因、目前進度（待重排／已重排／已完工），另附依原因、機型、機號的統計。</p></div>`; })()}
+    ${(()=>{ const t=todayISO(), f=t.slice(5,7)>="07"?t.slice(0,4)+"-07-01":t.slice(0,4)+"-01-01", inp='style="padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2)"';
+      return `<div class="exp-opt"><label><input type="radio" name="xMode" value="review"> <b>考核統計</b></label>
+        <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:6px"><input type="date" id="xRvF" value="${f}" ${inp} aria-label="起"> 至 <input type="date" id="xRvT" value="${t}" ${inp} aria-label="迄"></div>
+        <p>依期間彙總排工、改排、回報完工、刪除重複工單、退工、改工單次數，每月工時與完工率，附逐筆異動明細，可直接引用到考核表。</p></div>`; })()}
     <div id="xWarn"></div>
     <div class="foot"><button class="btn" data-n>取消</button><button class="btn primary" data-y>下載 Excel</button></div>`);
+  d.querySelectorAll("#xRvF,#xRvT").forEach(x=>x.onchange=()=>{ d.querySelector('input[name=xMode][value=review]').checked=true; });
   const retRange=()=>{ let f=d.querySelector("#xRetF").value, t=d.querySelector("#xRetT").value; if(t<f){ const x=f; f=t; t=x; } return [f,t]; };
   const retCnt=()=>{ const [f,t]=retRange(); d.querySelector("#xRetN").textContent=`共 ${recList("returns").filter(x=>{ const m=(x.date||"").slice(0,7); return m>=f&&m<=t; }).length} 筆`; };
   const pickRet=k=>{ d.querySelector('input[name=xMode][value=ret]').checked=true; if(k) d.querySelector(`input[name=xRetK][value=${k}]`).checked=true; retCnt(); };
@@ -2950,6 +3088,8 @@ function exportDlg(){
   d.querySelector("[data-y]").onclick=()=>{
     const m=d.querySelector("input[name=xMode]:checked").value;
     if(m==="full"){ closeDlg(); exportXlsx(); return; }
+    if(m==="recent"){ closeDlg(); exportXlsx(null,{recent:true}); return; }
+    if(m==="review"){ const f=d.querySelector("#xRvF").value, t=d.querySelector("#xRvT").value; if(!f||!t){ d.querySelector("#xWarn").innerHTML=`<p style="color:var(--red);font-size:13px">請選擇期間。</p>`; return; } closeDlg(); exportReview(f,t); return; }
     if(m==="ret"){ const k=d.querySelector("input[name=xRetK]:checked").value; if(k==="r"){ const [f,t]=retRange(); closeDlg(); exportReturns(f,t); } else { const mo=d.querySelector("#xRetM").value; closeDlg(); exportReturns(mo); } return; }
     if(m==="view"){ closeDlg(); exportXlsx({list:view,label:viewLab,scope,file:(scope?scope+"_":"")+viewLab.replace(/[\\/:*?"<>|「」\s]/g,"")}); return; }
     const ks=[...d.querySelectorAll(".xst input:checked")].map(c=>c.value);
@@ -4294,6 +4434,7 @@ function openRetImport(){
     dz.addEventListener("dragover",e=>e.preventDefault()); dz.addEventListener("drop",e=>{ e.preventDefault(); riImgs([...e.dataTransfer.files]); });
     d.querySelector("#riRead").onclick=()=>riRead(true); }
   const rt=d.querySelector("#riReadText"); if(rt) rt.onclick=()=>riRead(false);
+  { const ta=d.querySelector("#riText"); if(ta&&AI&&AI.local){ if(!aiOK) ta.focus(); ta.addEventListener("paste",()=>setTimeout(()=>riRead(false),50)); } }   // 網站版：貼上信件就自動讀取
   d.querySelector("#riAdd").onclick=()=>{ riSync(); RI.rows.push({}); riDraw(); };
   d.querySelector("[data-n]").onclick=()=>{ if(RI&&RI.ctl) RI.ctl.abort(); RI=null; closeDlg(); };
   d.querySelector("#riSave").onclick=riSave;
@@ -4308,8 +4449,10 @@ function riImgs(files){
   $("#riRead").disabled=!RI.imgs.length; const st=$("#riStatus"); if(st) st.textContent=RI.imgs.length?`${RI.imgs.length} 張截圖`:"";
 }
 function riSync(){ if(!RI) return; document.querySelectorAll("#riTable tr[data-i]").forEach(tr=>{ const r=RI.rows[+tr.dataset.i]; tr.querySelectorAll("input,select").forEach(x=>{ r[x.dataset.f]=x.type==="checkbox"?(x.checked?"1":"0"):x.value.trim(); }); }); }
+function riDup(r){ const wo=canonHit(normWO(r.wo||"")); return wo&&r.date?recList("returns").find(x=>(x.wo===wo||canonWO(x.wo)===canonWO(wo))&&x.date===r.date):null; }
 function riInfo(r){
   if(!r.wo) return {t:"",c:""}; const wo=canonHit(normWO(r.wo)); const w=derive().all.find(v=>v.wo===wo);
+  const dup=riDup(r); if(dup) return {t:`已登錄過（${fmtD(dup.date).slice(5)} ${dup.reason||""}），不會重複記錄`,c:"var(--red)",wo,w,dup};
   if(!w) return {t:"不在管控表（仍會記錄）",c:"var(--amber)",wo};
   return {t:`${w.tail} · ${ST[w.st].t}${w.sched?" · 排定 "+fmtD(w.sched).slice(5):""}`,c:w.st==="done"?"var(--amber)":"var(--ink-3)",wo,w};
 }
@@ -4335,7 +4478,7 @@ async function riRead(img){
     const out=img?await AI.json(prompt,{images:RI.imgs,signal:RI.ctl.signal}):await AI.json(prompt.replace("你會看到","以下是")+"\n\n=== 退工資料 ===\n"+txt.slice(0,20000),{signal:RI.ctl.signal});
     const rows=(out&&Array.isArray(out.rows)?out.rows:[]).map(r=>{ const t=String(r.tail||"").toUpperCase().match(/B-?\d{5}/);
       return {wo:normWO(String(r.wo||"").replace(/\/\d{1,2}\s*$/,"")).replace(/[^0-9A-Z\-]/g,""),title:String(r.title||"").trim(),clar:CLAR[r.clar]?r.clar:"none",card:String(r.card||"").trim().toUpperCase(),tail:t?(t[0].includes("-")?t[0]:t[0].replace("B","B-")):"",date:parseDate(r.date)||todayISO(),reason:String(r.reason||"").trim(),note:String(r.note||"").trim(),newDate:parseDate(r.newDate)||""}; }).filter(r=>r.wo);
-    riSync(); RI.rows=[...RI.rows.filter(r=>r.wo||r.note),...rows]; if(!RI.rows.length) RI.rows=[{}]; riDraw();
+    riSync(); { const seen=new Set(); RI.rows=[...RI.rows.filter(r=>r.wo||r.note),...rows].filter(r=>{ if(!r.wo) return true; const k=canonWO(r.wo)+"|"+(r.date||""); if(seen.has(k)) return false; seen.add(k); return true; }); } if(!RI.rows.length) RI.rows=[{}]; riDraw();
     st.textContent=rows.length?`讀到 ${rows.length} 筆，請核對後按「登錄退工」。`:"沒有讀到工單號碼。";
   }catch(e){ const c=e&&e.code; st.textContent=c==="cancelled"?"已停止":c==="not_granted"||c==="sampling_disabled"?"未允許此頁使用 Claude，請手動輸入。":c==="rate_limited"?"使用量已達上限，請稍後再試。":c==="invalid_json"?"讀取結果格式不正確，請再試一次。":c==="image_rejected"?"這張圖片無法讀取，請換一張。":"讀取失敗，請再試一次。"; }
   finally{ if(RI){ RI.busy=false; RI.ctl=null; } }
@@ -4345,9 +4488,9 @@ async function riSave(){
   const bad=rows.filter(r=>!r.wo||!r.date||!r.reason);
   if(!rows.length||bad.length){ $("#riWarn").innerHTML=`<p style="color:var(--red);font-size:13px">${rows.length?`有 ${bad.length} 列缺少 WO、日期或原因。`:"請至少輸入一筆。"}</p>`; return; }
   $("#riSave").disabled=true; leaveDemo();
-  let n=0;
+  let n=0, skip=0;
   for(const r of rows){
-    const inf=riInfo(r); const wo=inf.wo||normWO(r.wo); const w=inf.w||derive().reg[wo]||{};
+    const inf=riInfo(r); if(inf.dup){ skip++; continue; } const wo=inf.wo||normWO(r.wo); const w=inf.w||derive().reg[wo]||{};
     const tail=(r.tail||w.tail||"").toUpperCase();
     // a returned WO that is not in the plan yet can be added as an ad-hoc WO, so its reschedule and completion are tracked
     if(!inf.w&&r.addPlan!=="0"&&/^B-\d{5}$/.test(tail)){ const mo=(r.newDate||r.date||todayISO()).slice(0,7); const it={tail,mr:(r.card||"").toUpperCase(),title:r.title||"",pkgType:"退工追加",remark:"退工："+r.reason+(r.note?"，"+r.note:""),src:"退工登錄",sender:"退工登錄",at:new Date().toISOString(),by:me&&me.id||""}; for(const k of Object.keys(it)) if(!it[k]) delete it[k]; await B.putAdhoc(mo,{[wo]:it}); }
@@ -4357,7 +4500,7 @@ async function riSave(){
     n++;
   }
   const sibN=rows.filter(r=>clarWait({clar:r.clar})).filter(r=>{ const c=String(r.card||cardOf(derive().reg[normWO(r.wo)]||{})).toUpperCase(); return c&&derive().all.some(v=>v.tail!==(r.tail||"").toUpperCase()&&v.st!=="done"&&!v.noWo&&cardOf(v).toUpperCase()===c); }).length;
-  RI=null; closeDlg(); if(mode==="local"){ invalidate(); render(); } toast(`已登錄 ${n} 筆退工`+(sibN?`；其中 ${sibN} 筆同卡號還有其他架，可在退工紀錄按「更新進度」勾選暫停安排`:""));
+  RI=null; closeDlg(); if(mode==="local"){ invalidate(); render(); } toast(`已登錄 ${n} 筆退工`+(skip?`（${skip} 筆已登錄過，略過）`:"")+(sibN?`；其中 ${sibN} 筆同卡號還有其他架，可在退工紀錄按「更新進度」勾選暫停安排`:""));
 }
 
 let AH=null; // dialog state
