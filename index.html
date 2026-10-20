@@ -1572,7 +1572,7 @@ function derive(){
       if(sh&&hardD&&hardD>=today&&flCovers(w.tail,hardD)&&!flWork(w.tail,hardD,sts)) flLast=flLastBefore(w.tail,hardD,sts)||{none:true}; }
     // returned and waiting for 工程/修管 to clarify, not re-scheduled: on hold — not planned, not nagged
     const holdR=st!=="done"&&!sc.d?(lastRet&&(clarWait(lastRet))?lastRet:holdBy[w.wo]||(sc.wt&&sc.wt.r?{wo:w.wo,tail:w.tail,clar:"other",clarText:sc.wt.r,wt:sc.wt}:null)):null; const hold=!!holdR;
-    all.push({...w,due,start,dueBy,dueOld,st,stn,doneManual:!!(dn&&dn.manual),doneBy:dn&&dn.mBy||"",hmvEv:(hmvWo[w.wo]||{}).ev||(w.short&&hmvOn[w.tail])||(st==="hmv"&&w.projHmv)||null,doneVia:dn&&dn.via||"",doneSrcWo:dn&&dn.srcWo||"",flNo,flLast,dueAuto,startAuto,startMan,dueNote,dueByAt:dueBy==="manual"?sc.duAt||"":"",supWos:supOf[w.wo]||[],retN:rets.length,fixN:fixes.length,fixOpen:fixes.filter(x=>x.status!=="fixed").length,retPending:!!(lastRet&&st!=="done"&&!sc.d&&lastRet.clar!=="eng"&&lastRet.clar!=="mps"),lastRet,sched:sc.d||"",note:sc.n||"",schedBy:sc.by||"",schedAt:sc.at||"",schedWas:sc.was||"",projD:w.projD||"",hold,holdR,vs:(w.projD&&!sc.d&&!sc.wm&&!hold&&["soon","todo","queue"].includes(st))?"sched":st,wm:!!(sc.wm&&st!=="done"),eta:sc.wm?sc.eta||"":"",mn:sc.wm?sc.mn||"":"",wmAt:sc.wm?sc.wmAt||"":"",auto:!!(w.projD&&!sc.d&&!sc.wm&&!hold&&!["done","hmv","nowo","miss"].includes(st)),doneDate:dn?dn.date:"",effDue,planD,hardD,left:effDue?daysBetween(today,effDue):null,late:!!(sc.d&&limit&&sc.d>limit&&st!=="done"),early:!!(sc.d&&start&&sc.d<start&&st!=="done")});
+    all.push({...w,due,start,dueBy,dueOld,st,stn,doneManual:!!(dn&&dn.manual),doneBy:dn&&dn.mBy||"",hmvEv:(hmvWo[w.wo]||{}).ev||(w.short&&hmvOn[w.tail])||(st==="hmv"&&w.projHmv)||null,doneVia:dn&&dn.via||"",doneSrcWo:dn&&dn.srcWo||"",flNo,flLast,dueAuto,startAuto,startMan,dueNote,dueByAt:dueBy==="manual"?sc.duAt||"":"",supWos:supOf[w.wo]||[],retN:rets.length,fixN:fixes.length,fixOpen:fixes.filter(x=>x.status!=="fixed").length,retPending:!!(lastRet&&!lastRet.closed&&st!=="done"&&!sc.d&&lastRet.clar!=="eng"&&lastRet.clar!=="mps"),lastRet,sched:sc.d||"",note:sc.n||"",schedBy:sc.by||"",schedAt:sc.at||"",schedWas:sc.was||"",projD:w.projD||"",hold,holdR,vs:(w.projD&&!sc.d&&!sc.wm&&!hold&&["soon","todo","queue"].includes(st))?"sched":st,wm:!!(sc.wm&&st!=="done"),eta:sc.wm?sc.eta||"":"",mn:sc.wm?sc.mn||"":"",wmAt:sc.wm?sc.wmAt||"":"",auto:!!(w.projD&&!sc.d&&!sc.wm&&!hold&&!["done","hmv","nowo","miss"].includes(st)),doneDate:dn?dn.date:"",effDue,planD,hardD,left:effDue?daysBetween(today,effDue):null,late:!!(sc.d&&limit&&sc.d>limit&&st!=="done"),early:!!(sc.d&&start&&sc.d<start&&st!=="done")});
     months[w.month]=1;
   }
   // completions outside the plan, minus those already put to use (short-interval last-done, card matches)
@@ -2744,7 +2744,7 @@ function checksOf(sc){
     {k:"pzAll",t:"⏸ 暫緩中",c:"c-todo",list:open.filter(w=>w.hold&&w.holdR.wt),d:"修管尚未取消、但通知先不發工的工單（例如評估併 HMV）。工單保留在計畫中，不自動預排；到追蹤日或到期前 7 天會提醒。"},
     {k:"retWait",t:"退工待澄清",c:"c-soon",list:sc.filter(w=>w.lastRet&&(clarWait(w.lastRet))&&w.st!=="done"),d:"退工後等工程或修管回覆的工單。收到回覆後，在統計區按「更新進度」記錄並改為已澄清。"},
     {k:"retPending",t:"退工待重排",c:"c-over",list:sc.filter(w=>w.retPending),d:"現場退回、還沒有重新排定日期的工單。"},
-    {k:"retTrack",t:"退工已重排、待完工",c:"c-sched",list:sc.filter(w=>w.retN&&w.st!=="done"&&w.sched),d:"退工後已重新排定，還沒有完工紀錄。過了排定日仍未完工的，請確認是否再次退工。"},
+    {k:"retTrack",t:"退工已重排、待完工",c:"c-sched",list:sc.filter(w=>w.retN&&!(w.lastRet&&w.lastRet.closed)&&w.st!=="done"&&w.sched),d:"退工後已重新排定，還沒有完工紀錄。過了排定日仍未完工的，請確認是否再次退工。"},
     {k:"fixOpen",t:"改工單待工程修正",c:"c-soon",list:sc.filter(w=>w.fixOpen),d:"工單程序或工時有問題，已記錄但工程還沒修正（含已完工的）。"},
     {k:"adhocTodo",t:"臨時工單未排定",c:"c-over",list:open.filter(w=>(w.adhoc||w.alsoAdhoc)&&!w.sched),d:"由信件通知的臨時加工，不在月計畫 Excel 中，還沒有排定日期。"},
     {k:"nodue",t:"無到期日（N/A、TBD）",c:"c-todo",list:open.filter(w=>!w.due&&!w.effDue&&!w.sched&&w.st!=="queue"),d:"沒有日期可以排序，容易被忽略。確認是否需要安排。"},
@@ -3758,6 +3758,7 @@ function retProgress(x){
   const w=derive().all.find(v=>v.wo===x.wo);
   const later=recList("returns").filter(r=>r.wo===x.wo&&(r.at||"")>(x.at||""));
   if(w&&w.st==="done") return {k:"done",t:"已完工"+(w.doneDate?" "+fmtD(w.doneDate).slice(5):"")};
+  if(x.closed) return {k:"done",t:"已結案"+(x.hist?"（補登）":"")};   // 歷史補登／手動結案：不再追蹤、不影響派工
   if(later.length) return {k:"again",t:"再次退工 "+fmtD(later[later.length-1].date).slice(5)};
   if(clarWait(x)) return {k:"wait",t:clarLbl(x)};
   if(!w) return {k:"gone",t:"不在管控表"};
