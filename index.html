@@ -172,6 +172,10 @@ td.title .s-card{display:block;font-size:13.5px;font-weight:700;color:var(--ink)
 .mini{display:inline-block;font-size:11px;padding:0 5px;border-radius:3px;border:1px solid var(--line);color:var(--ink-2);margin:2px 4px 0 0;white-space:nowrap}
 .mini.long{border-color:var(--violet);color:var(--violet)}
 .mini.warn{border-color:var(--red);color:var(--red)}
+.mini.cap{border-color:#5B7F95;color:#43677D;background:color-mix(in srgb,#5B7F95 8%,transparent)}
+.capd{font-size:12px;color:var(--ink-2);margin:2px 0 4px 2px}.capd.warn{color:var(--red)}
+.cap-t{width:100%;border-collapse:collapse;font-size:12.5px}.cap-t th,.cap-t td{padding:5px 8px;border-top:1px solid var(--line);text-align:left;vertical-align:top}.cap-t th{background:var(--panel-2);position:sticky;top:0}
+.cap-t td.it{white-space:pre-line;max-width:420px}.cap-ok{color:#587352}.cap-cond{color:#86683A}.cap-no{color:var(--red)}
 .days{font-size:11.5px;color:var(--ink-3);display:block}
 .days.neg{color:var(--red)} .days.soon{color:var(--amber)}
 td input[type=date]{border:1px solid var(--line);background:var(--panel);border-radius:4px;padding:3px 6px;font-size:12.5px;font-family:var(--mono);width:132px}
@@ -1225,6 +1229,7 @@ const B={
   async setFlights(tail,doc){ const id=safeKey(tail); M.flights={...(M.flights||{}),[id]:doc}; invalidate(); if(mode==="db") return q("flights/"+id,()=>withRetry(()=>db.doc("flights/"+id).set(doc))).catch(dbFail); persistLocal(); },
   async setMx(month,doc){ const id=safeKey(month); M.mxplan={...(M.mxplan||{}),[id]:doc}; invalidate(); if(mode==="db") return q("mxplan/"+id,()=>withRetry(()=>db.doc("mxplan/"+id).set(doc))).catch(dbFail); persistLocal(); },
   async setHmv(tail,doc){ const id=safeKey(tail); if(mode==="db"){ (M.hmv=M.hmv||{})[id]=doc; invalidate(); } if(mode==="db") return q("hmv/"+id,()=>withRetry(()=>db.doc("hmv/"+id).set(doc))).catch(dbFail); (M.hmv=M.hmv||{})[id]=doc; persistLocal(); },
+  async setCap(st,doc){ M.stncap={...(M.stncap||{}),[st]:doc}; invalidate(); if(mode==="db") return q("stncap/"+st,()=>withRetry(()=>db.doc("stncap/"+st).set(doc))).catch(dbFail); persistLocal(); },
   async setConfig(cfg){ if(mode==="db") return q("config/main",()=>withRetry(()=>db.doc("config/main").set(cfg))).catch(dbFail); M.config=cfg; persistLocal(); },
   async putAdhoc(month,items){
     const id=safeKey(month);
@@ -2067,9 +2072,76 @@ function mxBlocks(tail){ const out=[]; for(const d of Object.values(M.mxplan||{}
 function mxOn(tail,d){ return mxBlocks(tail).filter(b=>b.start<=d&&d<=b.end); }
 function mxLabel(b){ return b.kind==="ACHK"?`🔧 ${b.label}`:`🔧 ${b.cat||""} ${b.label}`.replace(/\s+/g," ").trim(); }
 /* ---------- 外站派遣檢查: if this aircraft leaves for RMQ/KHH on D for N days, what breaks? ---------- */
+/* =====================================================================
+   外站可執行清單（RMQ／KHH）：每張工卡的可執行狀態、需帶料件／工具、需通知 QC，
+   與「RMQ可執行／KHH可執行」的工單比對，列出外站缺什麼
+   ===================================================================== */
+const CAP_ST={"✅可執行":"ok","可執行":"ok","⚠️有條件":"cond","有條件":"cond","❌不建議":"no","不建議":"no"};
+const CAP_L={ok:"可執行",cond:"有條件",no:"不建議","":"已列入"};
+function capHead(rows){ for(let i=0;i<Math.min(rows.length,6);i++){ const H=(rows[i]||[]).map(normH); if(H.includes("TASK NO")&&H.some(h=>/^(RMQ|KHH) (CFM|STATUS)$/.test(h))) return i; } return -1; }
+function isCapBook(wb){ return wb.SheetNames.some(sn=>capHead(sheetRows(wb.Sheets[sn]))>=0); }
+function capItems(note){ const out=[]; let toolHdr=false;
+  for(let l of String(note||"").split(/\r?\n/)){ l=l.trim(); if(!l) continue;
+    if(/^TOOL\s*[:：]?$/i.test(l)){ toolHdr=true; continue; }
+    if(!/P\/N|TOOL|已常備|已備|有備/i.test(l)) continue;
+    const tool=toolHdr||/TOOL|工具|油槍|溫度槍|LAPTOP|PMAT/i.test(l), stocked=/已常備|已備|(RMQ|KHH)有備?|（已常備）|\(已常備\)/.test(l)&&!/需評估|待運補/.test(l), opt=/OPTIONAL|\(AR\)|可不用|替代/i.test(l);
+    const q=l.match(/[*＊]\s*(\d+)\s*EA|\s(\d+)\s*EA\b/i);
+    let name=l.replace(/（已常備）|\(已常備\)|已常備|已備|(RMQ|KHH)有備?-?/g," ").replace(/\((OPTIONAL|AR)\)|（[^）]*可不用[^）]*）|\([^)]*可不用[^)]*\)/ig," ")
+      .replace(/^[\s\-：:]*(需備?\s*)?(SVC\s*)?(TOOL)?\s*(P\/N)?\s*[:：]?/i,"").replace(/^\s*P\/N\s*[:：]?/i,"").replace(/[*＊]\s*\d+\s*EA.*$/i,"").replace(/\s+\d+\s*EA\b.*$/i,"").replace(/P\/N\s*[:：]?/ig," ").replace(/[（(][^）)]*替代[^）)]*[）)]?/g,"").replace(/\s+/g," ").trim();
+    if(name.length<2) continue;
+    out.push({name,qty:q?+(q[1]||q[2]):null,tool,stocked,opt}); }
+  return out; }
+function importCap(wb,fileName){
+  let st=""; for(const sn of wb.SheetNames){ const rows=sheetRows(wb.Sheets[sn]); const hi=capHead(rows); if(hi<0) continue; const c=(rows[hi]||[]).map(normH).find(h=>/^(RMQ|KHH) CFM$/.test(h)); if(c){ st=c.slice(0,3); break; } }
+  if(!st){ const m=String(fileName).toUpperCase().match(/RMQ|KHH/); st=m?m[0]:""; }
+  if(!st) return {ok:false,msg:"看不出是 RMQ 還是 KHH 的清單（找不到「RMQ CFM」或「KHH CFM」欄）。"};
+  const cards={}, stock={}; let n=0;
+  for(const sn of wb.SheetNames){ const rows=sheetRows(wb.Sheets[sn]);
+    const hi=capHead(rows);
+    if(hi>=0){ const H=(rows[hi]||[]).map(normH), ix=re=>H.findIndex(h=>re.test(h)), C={card:ix(/^TASK NO$/),desc:ix(/^TASK DESC/),mh:ix(/^M\/H/),iv:ix(/^INTERVAL$/),stat:ix(/STATUS$/),mat:ix(/^備料$/),qc:ix(/^QC$/),tool:ix(/^TOOL$/),note:ix(/^備註$/),cfm:ix(/ CFM$/),date:ix(/^日期$/)};
+      const g=(r,k)=>C[k]>=0&&r[C[k]]!=null?String(r[C[k]] instanceof Date?iso(r[C[k]]):r[C[k]]).trim():"";
+      for(let i=hi+1;i<rows.length;i++){ const r=rows[i]; if(!r) continue; const card=g(r,"card").toUpperCase().replace(/\s+/g,""); if(!card) continue;
+        const extra=C.cfm>=0?[r[C.cfm],r[C.cfm+1]].filter(v=>v!=null&&v!=="").map(String).join("\n").trim():"";
+        const e={desc:g(r,"desc"),mh:g(r,"mh"),iv:g(r,"iv"),st:CAP_ST[g(r,"stat")]??"",mat:/需/.test(g(r,"mat"))?"need":/常備/.test(g(r,"mat"))?"stocked":"",qc:/QC/.test(g(r,"qc")),tool:/需/.test(g(r,"tool"))?"need":"",note:g(r,"note"),extra,items:capItems(g(r,"note"))};
+        for(const k of Object.keys(e)) if(e[k]===""||e[k]===false||(Array.isArray(e[k])&&!e[k].length)) delete e[k];
+        if(cards[card]){ if(e.note&&cards[card].note!==e.note){ cards[card].note=[cards[card].note,e.note].filter(Boolean).join("\n"); cards[card].items=capItems(cards[card].note); } continue; }
+        cards[card]=e; n++; } }
+    else { // 常備物料量表
+      let h2=-1; for(let i=0;i<Math.min(rows.length,8);i++) if((rows[i]||[]).map(normH).includes("儲放物料")){ h2=i; break; } if(h2<0) continue;
+      const H=(rows[h2]||[]).map(normH), ix=re=>H.findIndex(h=>re.test(h)), cN=ix(/^儲放物料$/), cU=ix(/^一架機用量$/), cQ=ix(/^目前備料數/), cA=ix(/^預計調整數/), cD=ix(/^通知日期$/);
+      for(let i=h2+1;i<rows.length;i++){ const r=rows[i]; if(!r||!r[cN]) continue; const nm=String(r[cN]).trim(); const num=v=>v==null||v===""?null:+v;
+        stock[nm]={per:num(r[cU]),qty:num(r[cQ]),adj:cA>=0?num(r[cA]):null,date:cD>=0&&r[cD]?(parseDate(r[cD])||""):""}; } } }
+  if(!n) return {ok:false,msg:"找不到工卡列（需要「Task No」欄）。"};
+  return {st,doc:{station:st,file:fileName,at:new Date().toISOString(),by:me&&me.id||"",cards,stock},n,ns:Object.keys(stock).length};
+}
+function capOf(w,st){ const C=((M.stncap||{})[st]||{}).cards; if(!C||!w) return null; for(const k of [w.mr,w.taskId]){ const K=String(k||"").toUpperCase().replace(/\s+/g,""); if(K&&C[K]) return C[K]; } return null; }
+const capKey=it=>String(it.name||"").toUpperCase().replace(/[^A-Z0-9一-鿿]/g,"");
+// 外站已有的東西：任何工卡標「已常備」的項目＋常備物料表
+const capStockSet=st=>{ const S=(M.stncap||{})[st]; if(!S) return new Set(); if(S._sk) return S._sk; const k=new Set();
+  for(const c of Object.values(S.cards||{})) for(const it of (c.items||[])) if(it.stocked) k.add(capKey(it));
+  for(const nm of Object.keys(S.stock||{})) k.add(capKey({name:nm}));
+  k.delete(""); Object.defineProperty(S,"_sk",{value:k,enumerable:false,configurable:true}); return k; };
+// 一張工單在某外站：清單狀態、需帶項目（非常備、非選用）、是否需通知 QC、是否在清單中
+function capNeed(w,st){ const c=capOf(w,st); const S=((M.stncap||{})[st])||null; if(!S) return null;
+  const sc=((M.sched[shardOf(w.wo)]||{}).e||{})[w.wo]||{}; const explicit=new RegExp(st+"(可執行|可做|OK)").test([sc.n,w.remark].join(" ").toUpperCase().replace(/\s+/g,""));
+  if(!c) return explicit?{st,miss:true,need:[],opt:[],stocked:[],low:[],qc:false,explicit}:null;
+  const stockK=Object.keys(S.stock||{}).map(k=>[capKey({name:k}),k]);
+  const low=(c.items||[]).filter(it=>it.stocked).map(it=>{ const m=stockK.find(([k])=>k&&(capKey(it).includes(k)||k.includes(capKey(it)))); const v=m&&S.stock[m[1]]; return v&&v.qty!=null&&v.per!=null&&v.qty<v.per?{...it,stock:v,stockName:m[1]}:null; }).filter(Boolean);
+  const SK=capStockSet(st), has=it=>it.stocked||SK.has(capKey(it))||(!it.tool&&c.mat==="stocked");
+  const items=(c.items||[]).map(it=>has(it)&&!it.stocked?{...it,stocked:true,via:"站上已有"}:it);
+  return {st,c,status:c.st||"",need:items.filter(it=>!it.stocked&&!it.opt),opt:items.filter(it=>!it.stocked&&it.opt),stocked:items.filter(it=>it.stocked),low,qc:!!c.qc,mat:c.mat||"",tool:c.tool||"",explicit}; }
+const capIt=it=>`${it.tool?"🔧 ":""}${it.name}${it.qty?" ×"+it.qty:""}`;
+function capSummary(x){ if(!x) return ""; if(x.miss) return `${x.st} 清單未列（尚未詢問）`;
+  return [x.status==="no"?`${x.st} 清單：不建議`:x.status==="cond"?`${x.st} 清單：有條件`:"",x.need.length?`需帶 ${x.need.map(capIt).join("、")}`:x.mat==="need"||x.tool==="need"?"需備料／工具（清單備註未列件號）":"",x.qc?"需通知 QC":"",x.low.length?`常備量不足：${x.low.map(i=>i.stockName+"（剩 "+i.stock.qty+"／一架 "+i.stock.per+"）").join("、")}`:""].filter(Boolean).join("；"); }
+function capTag(w){ if(!w||w.st==="done"||w.removed||!M.stncap) return ""; const sc=((M.sched[shardOf(w.wo)]||{}).e||{})[w.wo]||{}; const out=[];
+  for(const st of ["RMQ","KHH"]){ if(!(M.stncap||{})[st]||!stationOK(w,st,sc.n)) continue; const x=capNeed(w,st); if(!x) continue;
+    const hot=x.miss||x.status==="no"||x.need.length||x.qc||x.low.length||x.mat==="need"||x.tool==="need"; if(!hot) continue;
+    const lab=x.miss?`${st} 未詢問`:x.status==="no"?`${st} 不建議`:x.need.length?`${st} 需帶 ${x.need.length} 項`:x.low.length?`${st} 常備不足`:x.qc?`${st} 需QC`:`${st} 需備料`;
+    out.push(`<span class="mini ${x.status==="no"||x.low.length?"warn":"cap"}" title="${esc(capSummary(x)+(x.c&&x.c.note?"\n\n清單備註：\n"+x.c.note:""))}">${esc(lab)}</span>`); }
+  return out.join(""); }
 function dspCheck(t,D,N,st){
   const last=addDays(D,N-1), R=addDays(D,N), T=todayISO();
-  const out={t,type:typeOf(t),block:[],pre:[],move:[],wash:[],away:null,hmvNow:null};
+  const out={t,type:typeOf(t),block:[],pre:[],move:[],wash:[],cap:[],away:null,hmvNow:null};
   // where it is that day: HMV / already away
   const hv=Object.values(M.hmv||{}).filter(h=>h.tail===t).flatMap(h=>h.events||[]).find(e=>e.start&&e.start<=last&&((typeof e.released==="string"&&e.released)||e.end||"9999")>=D);
   if(hv) out.block.push(`HMV ${fmtD(hv.start).slice(5)}～${fmtD((typeof hv.released==="string"&&hv.released)||hv.end||"").slice(5)||"未定"}${hv.note?"（"+hv.note+"）":""}`);
@@ -2082,13 +2154,17 @@ function dspCheck(t,D,N,st){
   const S=String(st).toUpperCase();
   for(const w of derive().all){ if(w.tail!==t||w.removed||["done","hmv"].includes(w.st)||w.noWo) continue;
     if((w.short||w.shortQueue)&&/^(A321|A330)$/.test(w.type)) continue;
-    const sc=((M.sched[shardOf(w.wo)]||{}).e||{})[w.wo]||{}; if(stationOK(w,S,sc.n)) continue;
+    const sc=((M.sched[shardOf(w.wo)]||{}).e||{})[w.wo]||{};
+    if(stationOK(w,S,sc.n)){ const due=w.short?(w.hardD||w.planD||""):(w.effDue||w.due||""), sd=w.sched||"";   // 外站要做的工單：清單比對需帶什麼
+      if((sd&&sd>=D&&sd<=last)||(!sd&&due&&due<=last)||(w.short&&due&&due<=last)){ const x=capNeed(w,S); if(x&&(x.miss||x.status==="no"||x.need.length||x.qc||x.low.length||x.mat==="need"||x.tool==="need")) out.cap.push({w,x,due,sd}); }
+      continue; }
     const due=w.short?(w.hardD||""):(w.effDue||w.due||""); const sd=w.sched||"";
     if(sd&&sd>=D&&sd<=last) out.move.push({w,d:sd,due});
     else if(due&&due<=last&&!(sd&&sd<D)) out.pre.push({w,due,sd}); }
-  out.pre.sort((a,b)=>a.due<b.due?-1:1); out.move.sort((a,b)=>a.d<b.d?-1:1);
+  out.pre.sort((a,b)=>a.due<b.due?-1:1); out.move.sort((a,b)=>a.d<b.d?-1:1); out.cap.sort((a,b)=>(a.due||"9")<(b.due||"9")?-1:1);
+  out.pre.forEach(p=>{ const c=capOf(p.w,S); if(c) p.cap=c; });   // 限 TPE 的工單，若清單寫可執行，提示可加備註
   const known=!!FLX().tails[t]||derive().all.some(w=>w.tail===t&&!w.noWo);
-  out.verdict=!known?"none":out.away?"away":out.block.length?"no":out.pre.length||out.move.length||out.wash.length?"prep":"ok";
+  out.verdict=!known?"none":out.away?"away":out.block.length?"no":out.pre.length||out.move.length||out.wash.length||out.cap.length?"prep":"ok";
   return out;
 }
 function renderDsp(){
@@ -2108,11 +2184,12 @@ function renderDsp(){
       <label>在外 <input type="number" id="dspDays" min="1" max="60" value="${N}" style="width:60px"> 天，回 TPE 約 <b class="mono">${esc(fmtD(R).slice(5))}</b></label>
       <span class="seg">${["RMQ","KHH"].map(s=>`<button class="chip ${st===s?"on":""}" data-dsps="${s}">${s}</button>`).join("")}</span>
       <span class="seg">${types.map(x=>`<button class="chip ${ty===x?"on":""}" data-dspt="${esc(x)}">${esc(x)}</button>`).join("")}</span>
+      <button class="btn sm" id="capView">${esc(st)} 可執行清單${(M.stncap||{})[st]?"":"（未匯入）"}</button>${res.some(r=>r.cap.length)?`<button class="btn sm" id="capExp">匯出 ${esc(st)} 備料清單</button>`:""}
     </div>
     <div class="d-kpi dsp-kpi">${["ok","prep","no"].map(k=>`<div class="stat ${VT[k][1]}"><span class="lbl">${VT[k][0]}</span><span class="num">${cnt(k)}</span><span class="note">${k==="ok"?"在外期間沒有限 TPE 工單到期":k==="prep"?"有工單需先做或改期":"HMV／A CHK／停場衝突"}</span></div>`).join("")}</div>
     <div class="dsp-list">${res.map(r=>{ const v=VT[r.verdict];
-      const sum=[r.away?`目前在 ${esc(r.away.station)}${r.away.end?"（至 "+esc(fmtD(r.away.end).slice(5))+"）":""}`:"",...r.block.map(esc),r.pre.length?`派出前需完成 <b>${r.pre.length}</b> 張`:"",r.move.length?`排定日在外站、需改期 <b>${r.move.length}</b> 張`:"",r.wash.length?`管制台 ${r.wash.map(k=>esc(fmtD(k.date).slice(5)+" "+(MX_KIND[k.kind]||""))).join("、")} 在外站期間`:""].filter(Boolean);
-      const det=r.pre.length||r.move.length?`<details class="dsp-det"><summary>明細</summary>${r.pre.length?`<div class="dsub">派出前需完成（到期日落在 ${esc(fmtD(D).slice(5))}～${esc(fmtD(addDays(D,N-1)).slice(5))}，限 TPE）</div><ul>${r.pre.map(p=>wl(p.w,`<span class="days ${p.due<T?"neg":""}">DUE ${esc(fmtD(p.due).slice(5))}${p.sd?` · 排定 ${esc(fmtD(p.sd).slice(5))}`:""}</span>`)).join("")}</ul>`:""}${r.move.length?`<div class="dsub">排定日落在外站期間，需改期</div><ul>${r.move.map(m=>wl(m.w,`<span class="days">排定 ${esc(fmtD(m.d).slice(5))}${m.due?` · DUE ${esc(fmtD(m.due).slice(5))}`:""}</span>`)).join("")}</ul>`:""}</details>`:"";
+      const sum=[r.away?`目前在 ${esc(r.away.station)}${r.away.end?"（至 "+esc(fmtD(r.away.end).slice(5))+"）":""}`:"",...r.block.map(esc),r.pre.length?`派出前需完成 <b>${r.pre.length}</b> 張`:"",r.move.length?`排定日在外站、需改期 <b>${r.move.length}</b> 張`:"",r.wash.length?`管制台 ${r.wash.map(k=>esc(fmtD(k.date).slice(5)+" "+(MX_KIND[k.kind]||""))).join("、")} 在外站期間`:"",r.cap.length?`外站備料／工具 <b>${r.cap.length}</b> 張`:""].filter(Boolean);
+      const det=r.pre.length||r.move.length||r.cap.length?`<details class="dsp-det"><summary>明細</summary>${r.cap.length?`<div class="dsub">在 ${esc(st)} 要做的工單：需帶料件／工具、需 QC 或清單有疑慮</div><ul>${r.cap.map(p=>wl(p.w,`<span class="days">${p.sd?"排定 "+esc(fmtD(p.sd).slice(5)):p.due?"DUE "+esc(fmtD(p.due).slice(5)):""}</span><div class="capd ${p.x.status==="no"||p.x.miss?"warn":""}">${esc(capSummary(p.x))}</div>`)).join("")}</ul>`:""}${r.pre.length?`<div class="dsub">派出前需完成（到期日落在 ${esc(fmtD(D).slice(5))}～${esc(fmtD(addDays(D,N-1)).slice(5))}，限 TPE）</div><ul>${r.pre.map(p=>wl(p.w,`<span class="days ${p.due<T?"neg":""}">DUE ${esc(fmtD(p.due).slice(5))}${p.sd?` · 排定 ${esc(fmtD(p.sd).slice(5))}`:""}</span>${p.cap&&p.cap.st!=="no"?`<span class="mini cap" title="${esc(p.cap.note||"")}">${esc(st)} 清單：${esc(CAP_L[p.cap.st||""])}，可加備註「${esc(st)}可執行」</span>`:""}`)).join("")}</ul>`:""}${r.move.length?`<div class="dsub">排定日落在外站期間，需改期</div><ul>${r.move.map(m=>wl(m.w,`<span class="days">排定 ${esc(fmtD(m.d).slice(5))}${m.due?` · DUE ${esc(fmtD(m.due).slice(5))}`:""}</span>`)).join("")}</ul>`:""}</details>`:"";
       return `<div class="dsp-row dsp-${r.verdict}"><div class="dsp-h"><span class="pill ${v[1]}">${v[0]}</span><b class="mono">${esc(r.t)}</b><span class="dsp-s">${r.verdict==="none"?"沒有航班與工單資料（尚未交機？）":sum.join(" · ")||"在外期間沒有限 TPE 的工單到期，也沒有 HMV／A CHK 衝突"}</span></div>${det}</div>`; }).join("")}</div>
     <p class="muted" style="font-size:12px">判斷依據：月計畫與臨時工單的到期日（短天期以 INTERVAL DUE）、排定日期、備註「RMQ／KHH 可執行」、HMV 登錄、管制台月計畫（A CHK／ESP／EMP、洗機、除蟲）與航班。已逾期但未完成的工單也列在「派出前需完成」。</p>`;
   const f=$("#dspFrom"); if(f) f.onchange=e=>{ ui.dspFrom=e.target.value; renderDsp(); };
@@ -2120,7 +2197,36 @@ function renderDsp(){
   el.querySelectorAll("[data-dspn]").forEach(b=>b.onclick=()=>{ ui.dspDays=+b.dataset.dspn; renderDsp(); });
   el.querySelectorAll("[data-dsps]").forEach(b=>b.onclick=()=>{ ui.dspSt=b.dataset.dsps; renderDsp(); });
   el.querySelectorAll("[data-dspt]").forEach(b=>b.onclick=()=>{ ui.dspType=b.dataset.dspt; renderDsp(); });
+  { const b=$("#capView"); if(b) b.onclick=()=>capDlg(st); const x=$("#capExp"); if(x) x.onclick=()=>capExport(st,D,N,res); }
 }
+function capDlg(st){
+  const S=(M.stncap||{})[st]; let f="", fs="";
+  const d=openDlg(`<h3>${esc(st)} 可執行清單</h3>${S?`<p class="muted" style="font-size:12.5px">${esc(S.file||"")}　${esc(fmtT(S.at))}　共 ${Object.keys(S.cards||{}).length} 張工卡${Object.keys(S.stock||{}).length?`、常備物料 ${Object.keys(S.stock).length} 項`:""}。要更新，把新的 Excel 拖到主畫面即可（依「${esc(st)} CFM」欄辨識）。</p>`:`<p>還沒有匯入 ${esc(st)} 的清單。把含「Task No」「${esc(st)} CFM」欄的 Excel 拖到主畫面即可匯入。</p>`}
+    ${S?`<div class="row" style="gap:8px;flex-wrap:wrap"><input id="capQ" placeholder="搜尋工卡、件號、備註" style="flex:1;min-width:160px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2)"><span class="seg">${[["","全部"],["ok","可執行"],["cond","有條件"],["no","不建議"],["need","需帶料件／工具"]].map(([k,l])=>`<button class="chip ${k===""?"on":""}" data-cf="${k}">${l}</button>`).join("")}</span></div>
+    <div id="capT" style="max-height:52vh;overflow:auto;margin-top:8px"></div>
+    ${Object.keys(S.stock||{}).length?`<details style="margin-top:8px"><summary><b>常備物料量</b></summary><table class="cap-t"><tr><th>物料</th><th>一架機用量</th><th>目前備料數</th><th>預計調整數</th><th>通知日期</th></tr>${Object.entries(S.stock).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="mono">${v.per??""}</td><td class="mono ${v.qty!=null&&v.per!=null&&v.qty<v.per?"cap-no":""}">${v.qty??""}</td><td class="mono">${v.adj??""}</td><td class="mono">${esc(fmtD(v.date||""))}</td></tr>`).join("")}</table></details>`:""}`:""}
+    <div class="foot"><button class="btn primary" data-x>關閉</button></div>`);
+  d.style.maxWidth="1100px"; d.querySelector("[data-x]").onclick=closeDlg; if(!S) return;
+  const draw=()=>{ const Q=f.trim().toUpperCase(); const L=Object.entries(S.cards).filter(([k,c])=>(!fs||(fs==="need"?(c.items||[]).some(i=>!i.stocked&&!i.opt)||c.mat==="need"||c.tool==="need":(c.st||"")===fs))&&(!Q||(k+" "+(c.desc||"")+" "+(c.note||"")+" "+(c.extra||"")).toUpperCase().includes(Q)));
+    d.querySelector("#capT").innerHTML=`<table class="cap-t"><tr><th>工卡</th><th>工作</th><th>狀態</th><th>需帶</th><th>已常備</th><th>QC</th><th>備註</th></tr>${L.map(([k,c])=>{ const it=c.items||[];
+      return `<tr><td class="mono">${esc(k)}</td><td>${esc((c.desc||"").slice(0,50))}<br><span class="muted">${esc(c.iv||"")}${c.mh?" · "+esc(c.mh)+" MH":""}</span></td><td class="cap-${c.st||"ok"}">${esc(CAP_L[c.st||""])}</td>
+        <td class="it">${esc(it.filter(i=>!i.stocked).map(i=>capIt(i)+(i.opt?"（選用）":"")).join("\n"))||(c.mat==="need"||c.tool==="need"?"需備料／工具":"")}</td><td class="it">${esc(it.filter(i=>i.stocked).map(capIt).join("\n"))}</td><td>${c.qc?"需通知":""}</td><td class="it">${esc([c.note,c.extra].filter(Boolean).join("\n"))}</td></tr>`; }).join("")}</table>${L.length?"":`<p class="muted">沒有符合的工卡</p>`}`; };
+  d.querySelector("#capQ").oninput=e=>{ f=e.target.value; draw(); };
+  d.querySelectorAll("[data-cf]").forEach(b=>b.onclick=()=>{ fs=b.dataset.cf; d.querySelectorAll("[data-cf]").forEach(x=>x.classList.toggle("on",x===b)); draw(); });
+  draw();
+}
+function capExport(st,D,N,res){ if(!window.XLSX){ toast("Excel 元件尚未載入"); return; }
+  const H=["機號","WO","工卡","工作名稱","排定","到期","清單狀態","類型","需帶項目","數量","需通知 QC","常備不足","清單備註"]; const rows=[];
+  for(const r of res) for(const p of r.cap){ const x=p.x, base=[r.t,p.w.wo,cardOf(p.w),(p.w.title||"").slice(0,60),fmtD(p.sd||""),fmtD(p.due||""),x.miss?"清單未列":CAP_L[x.status||""]];
+    const tail=[x.qc?"需通知":"",x.low.map(i=>i.stockName+" 剩 "+i.stock.qty).join("、"),x.c&&x.c.note||""];
+    if(x.need.length) x.need.forEach(i=>rows.push([...base,i.tool?"工具":"料件",i.name,i.qty||"",...tail])); else rows.push([...base,"","","",...tail]); }
+  const ws=XLSX.utils.aoa_to_sheet([[`${st} 備料清單　派出 ${fmtD(D)}，在外 ${N} 天`],H,...rows]); ws["!cols"]=[9,10,22,40,10,10,9,6,34,5,9,24,50].map(w=>({wch:w}));
+  for(let c=0;c<H.length;c++){ const r=XLSX.utils.encode_cell({r:1,c}); if(ws[r]) ws[r].s={font:{bold:true,color:{rgb:"FFFFFF"}},fill:{fgColor:{rgb:"8C7266"}}}; }
+  // 合計：同一項目要帶幾份
+  const sum={}; for(const r of rows) if(r[8]){ const k=r[7]+"|"+r[8]; sum[k]=(sum[k]||0)+(+r[9]||1); }
+  const ws2=XLSX.utils.aoa_to_sheet([["類型","項目","合計數量（未註明數量以 1 計）"],...Object.entries(sum).sort().map(([k,n])=>[...k.split("|"),n])]); ws2["!cols"]=[{wch:6},{wch:40},{wch:22}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"逐張工單"); XLSX.utils.book_append_sheet(wb,ws2,"合計");
+  return saveWb(wb,`${st}備料清單_${D.replace(/-/g,"")}.xlsx`); }
 /* ---------- 優先排工: 長工時／指定授權・SKILL／水消、ENG WASH、BSI、AD/SB 先排，修管指定（料到安排）的另列 ---------- */
 const PRI={shop:{t:"修管指定",g:"mx",c:"pri-mx",d:"BATTERY、SLIDE、ELT、ULB 等送修（SHOP／PBTH），修管依料到指定日期"},water:{t:"水消",g:"plan",d:"只能排 日～四，且只能在 TPE 執行（遇紅休、不收水日請詢問修管）"},engwash:{t:"ENG WASH",g:"plan",d:"A330 需在 TPE 地停 13 小時以上（回 TPE 後引擎須冷卻 8 小時才能做）；A321／A359／A351 無此限制"},bsi:{t:"BSI",g:"plan"},sb:{t:"AD／SB",g:"plan"},av:{t:"AV SKILL",g:"plan"},auth:{t:"指定授權",g:"plan"},skill:{t:"指定 SKILL",g:"plan"},long:{t:"長工時",g:"plan"}};
 // planner's card lists (10/16): 水消 and ENG WASH are recognised by MR only
@@ -2291,6 +2397,10 @@ async function handleFiles(files,forced){
       if(/\.pdf$/i.test(f.name)||f.type==="application/pdf"){ leaveDemo(); await importMxPdf(f); continue; }
       let wb; try{wb=await readBook(f);}catch(e){showMsg("無法讀取檔案",`<p>${esc(f.name)} 不是可讀取的 Excel 檔（${esc(e.message)}）。</p>`);continue;}
       if(isFlightBook(wb)){ leaveDemo(); await importFlights(f); continue; }
+      if(isCapBook(wb)){ const r=importCap(wb,f.name); if(!r.ok&&r.msg){ showMsg("無法匯入外站清單",`<p>${esc(r.msg)}</p>`); continue; }
+        const old=(M.stncap||{})[r.st]; if(old&&!await confirmDlg(`更新 ${r.st} 可執行清單`,`<p>「${esc(f.name)}」：${r.n} 張工卡${r.ns?`、常備物料 ${r.ns} 項`:""}。<br>會取代目前的 ${r.st} 清單（${esc(old.file||"")}，${Object.keys(old.cards||{}).length} 張）。</p>`,"取代")) continue;
+        await B.setCap(r.st,r.doc); B.addLog({kind:r.st+" 可執行清單",file:f.name,n:r.n,at:r.doc.at,by:r.doc.by}); B.audit({act:"外站清單",to:`${r.st}：${r.n} 張工卡`});
+        invalidate(); render(); showMsg(`${r.st} 可執行清單已匯入`,`<p>${r.n} 張工卡${r.ns?`、常備物料 ${r.ns} 項`:""}。備註「${esc(r.st)}可執行」的工單會自動比對需帶的料件／工具，顯示在工單標籤與「派遣檢查」。</p>`); continue; }
       let kind=classify(wb);
       if(forced==="done"&&kind!=="backup") kind="done";
       if(forced==="plan"&&kind==="done") kind="plan";
@@ -3273,7 +3383,7 @@ function dayItem(w,opt){
   const dl=w.left==null?"":w.left<0?"neg":w.left<=(w.short?2:M.config.soonDays)?"soon":"";
   const tags=[w.short||w.shortQueue?`<span class="mini long">短天期</span>`:"",w.adhoc||w.alsoAdhoc?`<span class="mini long">臨時</span>`:"",
     w.retN?`<span class="mini ${w.st==="done"?"":"warn"}">退工 ${w.retN}${w.lastRet?"："+esc(w.lastRet.reason):""}</span>`:"",
-    priTag(w), matTag(w), flTag(w), w.fixOpen?`<span class="mini warn">改工單待修正</span>`:"", holdTag(w), w.stn?`<span class="mini warn">駐 ${esc(w.stn.st)} ${esc(fmtD(w.stn.start).slice(5))}–${esc(fmtD(w.stn.end).slice(5)||"?")} · 限 TPE</span>`:"",
+    priTag(w), matTag(w), capTag(w), flTag(w), w.fixOpen?`<span class="mini warn">改工單待修正</span>`:"", holdTag(w), w.stn?`<span class="mini warn">駐 ${esc(w.stn.st)} ${esc(fmtD(w.stn.start).slice(5))}–${esc(fmtD(w.stn.end).slice(5)||"?")} · 限 TPE</span>`:"",
     w.late?`<span class="mini warn">晚於到期日</span>`:"", w.early?`<span class="mini warn">早於可執行日</span>`:"", w.dueBy==="remark"?`<span class="mini warn">到期依 REMARK</span>`:"",
     w.doneManual?`<span class="mini">手動回報完工</span>`:"", w.doneVia==="card"?`<span class="mini">卡號比對完工 WO ${esc(w.doneSrcWo)}</span>`:"", w.doneVia==="sup"?`<span class="mini" title="同機同卡號的較新 WO 已執行，這張舊 WO 一併結案">與 WO ${esc(w.doneSrcWo)} 同次完成</span>`:"",(w.supWos||[]).length?`<span class="mini" title="同機同卡號的舊 WO（例如上月轉入）由這次執行一併結案">同時結 WO ${esc(w.supWos.join("、"))}</span>`:"", w.supBy&&w.st!=="done"?`<span class="mini warn">同卡 ${esc(fmtD(w.supBy.date).slice(5))} 已${w.supBy.wo?"由 WO "+esc(w.supBy.wo):""}完工 · 依預排重排</span>`:"", w.longHr?`<span class="mini long">長工時</span>`:"",
     w.st!=="done"&&w.month&&w.month<todayISO().slice(0,7)?`<span class="mini">${+w.month.slice(5)}月轉入</span>`:"",
@@ -3878,7 +3988,7 @@ function rowHTML(w){
   const dueEd=!w.noWo&&w.st!=="done"&&w.st!=="queue"&&canWrite!==false?`<button class="due-ed" data-due="${esc(w.wo)}" title="修改起始日／到期日（調機、FH/FC 變動時）" aria-label="修改起始日／到期日 ${esc(w.wo)}">✎</button>`:"";
   const dueMan=w.dueBy==="manual"?`<span class="mini warn" title="${esc([w.dueNote,w.dueAuto?"原到期 "+fmtD(w.dueAuto):"原為依 FH/FC"].filter(Boolean).join("\n"))}">手動到期${w.dueAuto?"（原 "+esc(fmtD(w.dueAuto).slice(5))+"）":""}</span>${w.dueNote?`<span class="days">${esc(w.dueNote.slice(0,30))}</span>`:""}`:"";
   const dueCell=(w.st==="queue"?`<span style="font-size:12px;color:var(--ink-3)">第 ${w.shortQueue.n}/${w.shortQueue.of} 張${w.projD?`<br>自動預排 <b class="mono">${fmtD(w.projD).slice(5)}</b>`:"<br>缺上次完工日"}</span>`:(w.planD||w.hardD)?`${w.hardD?`<span class="mono">DUE ${fmtD(w.hardD)}</span><span class="days ${leftCls}">${w.dueBy==="manual"?"手動調整":`間隔 ${esc(w.short.it.limitDays)} 天`}${w.st==="done"?"":" · "+leftTxt}</span>`:`<span class="mono" style="color:var(--ink-3)">依 FH/FC</span>`}${w.planD?`<span class="days ${w.st!=="done"&&w.planD<todayISO()&&!w.sched?"soon":""}">預排 ${fmtD(w.planD).slice(5)}（週期 ${esc(w.short.it.cycle)} 天）${w.st!=="done"&&w.planD<todayISO()?" · 已過預排":""}</span>`:""}`:w.due?`${w.start?`<span class="mono" style="font-size:11.5px;color:${w.startMan?"var(--amber)":"var(--ink-3)"}" ${w.startMan?`title="起始日手動調整${w.startAuto?"（原 "+esc(fmtD(w.startAuto))+" 起）":""}"`:""}>${fmtD(w.start).slice(5)} 起${w.startMan?"（手動）":""}</span><br>`:w.startMan&&w.startAuto?`<span class="mono" style="font-size:11.5px;color:var(--amber)" title="原 ${esc(fmtD(w.startAuto))} 起">不限起始日（手動）</span><br>`:""}<span class="mono">${fmtD(w.due)}</span><span class="days ${leftCls}">${w.st==="done"?"":leftTxt}</span>`:`<span class="mono" style="color:var(--ink-3)">${esc(w.dueRaw||"—")}</span>`)+dueMan+dueEd;
-  const tags=priTag(w)+matTag(w)+flTag(w)+(w.stn?`<span class="mini warn" title="駐站期間 ${esc(fmtD(w.stn.start))}～${esc(fmtD(w.stn.end)||"未定")}">駐 ${esc(w.stn.st)} ${esc(fmtD(w.stn.start).slice(5))}–${esc(fmtD(w.stn.end).slice(5)||"?")} · 限 TPE</span>`:"")+(w.st==="hmv"&&w.hmvEv?`<span class="mini hmvt" title="${esc(w.hmvEv.note||"")}">HMV ${esc(fmtD(w.hmvEv.start).slice(5))}–${esc(fmtD(w.hmvEv.released||w.hmvEv.end).slice(5))}${w.hmvEv.released?" 已 RELEASED":""}</span>`:"")+((w.doneVia==="card"?`<span class="mini" title="以機號＋卡號比對">卡號比對完工：WO ${esc(w.doneSrcWo)}</span>`:"")+[w.doneVia==="sup"?`<span class="mini" title="同機同卡號的較新 WO 已執行，這張舊 WO 一併結案">與 WO ${esc(w.doneSrcWo)} 同次完成</span>`:"",(w.supWos||[]).length?`<span class="mini" title="同機同卡號的舊 WO（例如上月轉入）由這次執行一併結案">同時結 WO ${esc(w.supWos.join("、"))}</span>`:""].join(""))+(w.supBy&&w.st!=="done"?`<span class="mini warn" title="原排定 ${esc(fmtD(w.schedWas||""))}">同卡 ${esc(fmtD(w.supBy.date).slice(5))} 已${w.supBy.wo?"由 WO "+esc(w.supBy.wo):""}完工 · 原排 ${esc(fmtD(w.schedWas||"").slice(5))} 已取消，依預排重排</span>`:"")+(w.longHr?`<span class="mini long">長工時</span>`:"")+(w.dueByMail?`<span class="mini warn" title="${esc(w.dueRaw||"")}">到期日依信件${w.dueRaw?"（原："+esc(w.dueRaw)+"）":""}</span>`:"")+(w.dueBy==="remark"?`<span class="mini warn" title="${esc(w.remark||"")}">到期日依 REMARK 下次 DUE${w.dueOld?"（原 "+esc(fmtD(w.dueOld).slice(5))+"）":""}</span>`:w.dueBy==="text"?`<span class="mini" title="${esc(w.dueRaw||"")}">到期日取自「${esc(String(w.dueRaw||"").replace(/\s+/g," ").slice(0,16))}」</span>`:"")+(w.doneManual?`<span class="mini" title="完工檔匯入後以完工檔為準">手動回報完工${w.doneBy?" · "+esc(who(w.doneBy)):""}</span>`:"")+(w.st!=="done"&&w.month&&w.month<todayISO().slice(0,7)?`<span class="mini">${+w.month.slice(5)}月轉入</span>`:"")+(w.late?`<span class="mini warn">晚於到期日</span>`:"")+(w.missing?`<span class="mini warn">新檔無此單</span>`:"")+(w.retN?`<span class="mini ${w.st==="done"?"":"warn"}" title="${esc(w.lastRet?(w.lastRet.date+" "+w.lastRet.reason+(w.lastRet.note?"："+w.lastRet.note:"")):"")}">退工 ${w.retN} 次${w.lastRet?"："+esc(w.lastRet.reason)+" · "+esc(fmtD(w.lastRet.date).slice(5)):""}${w.st==="done"?" · 已完工":w.sched?" · 已重排":" · 待重排"}</span>`:"")+holdTag(w)+(w.fixN?`<span class="mini ${w.fixOpen?"warn":""}">改工單 ${w.fixN}${w.fixOpen?` · ${w.fixOpen} 待修正`:" · 已修正"}</span>`:"")+(w.short||w.shortQueue?`<span class="mini long">短天期</span>`:"")+(w.carry?`<span class="mini">跨月</span>`:"")+(w.adhoc?`<span class="mini long">臨時加工</span>`:w.alsoAdhoc?`<span class="mini long">臨時通知＋月計畫</span>`:"")+(w.early?`<span class="mini warn">早於可執行日</span>`:"")+(w.sender||w.sentAt?`<span class="mini" title="${esc(w.subject||w.src||"")}">${esc(w.sender||"")}${w.sentAt?" · "+esc(fmtD(w.sentAt.slice(5,10))+" "+w.sentAt.slice(11,16)):""}</span>`:w.src?`<span class="mini" title="${esc(w.src)}">${esc(w.src.length>28?w.src.slice(0,28)+"…":w.src)}</span>`:"");
+  const tags=priTag(w)+matTag(w)+capTag(w)+flTag(w)+(w.stn?`<span class="mini warn" title="駐站期間 ${esc(fmtD(w.stn.start))}～${esc(fmtD(w.stn.end)||"未定")}">駐 ${esc(w.stn.st)} ${esc(fmtD(w.stn.start).slice(5))}–${esc(fmtD(w.stn.end).slice(5)||"?")} · 限 TPE</span>`:"")+(w.st==="hmv"&&w.hmvEv?`<span class="mini hmvt" title="${esc(w.hmvEv.note||"")}">HMV ${esc(fmtD(w.hmvEv.start).slice(5))}–${esc(fmtD(w.hmvEv.released||w.hmvEv.end).slice(5))}${w.hmvEv.released?" 已 RELEASED":""}</span>`:"")+((w.doneVia==="card"?`<span class="mini" title="以機號＋卡號比對">卡號比對完工：WO ${esc(w.doneSrcWo)}</span>`:"")+[w.doneVia==="sup"?`<span class="mini" title="同機同卡號的較新 WO 已執行，這張舊 WO 一併結案">與 WO ${esc(w.doneSrcWo)} 同次完成</span>`:"",(w.supWos||[]).length?`<span class="mini" title="同機同卡號的舊 WO（例如上月轉入）由這次執行一併結案">同時結 WO ${esc(w.supWos.join("、"))}</span>`:""].join(""))+(w.supBy&&w.st!=="done"?`<span class="mini warn" title="原排定 ${esc(fmtD(w.schedWas||""))}">同卡 ${esc(fmtD(w.supBy.date).slice(5))} 已${w.supBy.wo?"由 WO "+esc(w.supBy.wo):""}完工 · 原排 ${esc(fmtD(w.schedWas||"").slice(5))} 已取消，依預排重排</span>`:"")+(w.longHr?`<span class="mini long">長工時</span>`:"")+(w.dueByMail?`<span class="mini warn" title="${esc(w.dueRaw||"")}">到期日依信件${w.dueRaw?"（原："+esc(w.dueRaw)+"）":""}</span>`:"")+(w.dueBy==="remark"?`<span class="mini warn" title="${esc(w.remark||"")}">到期日依 REMARK 下次 DUE${w.dueOld?"（原 "+esc(fmtD(w.dueOld).slice(5))+"）":""}</span>`:w.dueBy==="text"?`<span class="mini" title="${esc(w.dueRaw||"")}">到期日取自「${esc(String(w.dueRaw||"").replace(/\s+/g," ").slice(0,16))}」</span>`:"")+(w.doneManual?`<span class="mini" title="完工檔匯入後以完工檔為準">手動回報完工${w.doneBy?" · "+esc(who(w.doneBy)):""}</span>`:"")+(w.st!=="done"&&w.month&&w.month<todayISO().slice(0,7)?`<span class="mini">${+w.month.slice(5)}月轉入</span>`:"")+(w.late?`<span class="mini warn">晚於到期日</span>`:"")+(w.missing?`<span class="mini warn">新檔無此單</span>`:"")+(w.retN?`<span class="mini ${w.st==="done"?"":"warn"}" title="${esc(w.lastRet?(w.lastRet.date+" "+w.lastRet.reason+(w.lastRet.note?"："+w.lastRet.note:"")):"")}">退工 ${w.retN} 次${w.lastRet?"："+esc(w.lastRet.reason)+" · "+esc(fmtD(w.lastRet.date).slice(5)):""}${w.st==="done"?" · 已完工":w.sched?" · 已重排":" · 待重排"}</span>`:"")+holdTag(w)+(w.fixN?`<span class="mini ${w.fixOpen?"warn":""}">改工單 ${w.fixN}${w.fixOpen?` · ${w.fixOpen} 待修正`:" · 已修正"}</span>`:"")+(w.short||w.shortQueue?`<span class="mini long">短天期</span>`:"")+(w.carry?`<span class="mini">跨月</span>`:"")+(w.adhoc?`<span class="mini long">臨時加工</span>`:w.alsoAdhoc?`<span class="mini long">臨時通知＋月計畫</span>`:"")+(w.early?`<span class="mini warn">早於可執行日</span>`:"")+(w.sender||w.sentAt?`<span class="mini" title="${esc(w.subject||w.src||"")}">${esc(w.sender||"")}${w.sentAt?" · "+esc(fmtD(w.sentAt.slice(5,10))+" "+w.sentAt.slice(11,16)):""}</span>`:w.src?`<span class="mini" title="${esc(w.src)}">${esc(w.src.length>28?w.src.slice(0,28)+"…":w.src)}</span>`:"");
   const miss="";
   const by=w.schedBy&&(w.sched||w.note)?`<button class="by wo-link" data-hist="${esc(w.wo)}">${esc(who(w.schedBy))} ${esc(fmtT(w.schedAt).slice(5))}</button>`:"";
   return `<tr class="st-${w.st}">
@@ -4920,7 +5030,7 @@ async function boot(){
     db.doc("config/main").onSnapshot(s=>{ const c=s.exists?s.data():null; const old=M.config.windowMonths; M.config={...defaultConfig,...(c||{})};
       if(first){ first=false; subscribePlans(M.config.windowMonths); } else if(M.config.windowMonths!==old) subscribePlans(M.config.windowMonths);
       invalidate(); render(); },e=>{ onDbErr(e); if(first){first=false; subscribePlans(6);} });
-    coll("sched","sched"); coll("done","done"); coll("adhoc","adhoc"); coll("short","short"); coll("returns","returns"); coll("changes","changes"); coll("hmv","hmv"); coll("station","station"); coll("flights","flights"); coll("mxplan","mxplan"); coll("daily","daily"); coll("ref","ref");
+    coll("sched","sched"); coll("done","done"); coll("adhoc","adhoc"); coll("short","short"); coll("returns","returns"); coll("changes","changes"); coll("hmv","hmv"); coll("station","station"); coll("flights","flights"); coll("mxplan","mxplan"); coll("daily","daily"); coll("ref","ref"); coll("stncap","stncap");
     const aCut=iso(new Date(Date.now()-90*DAY));
     db.collection("audit").where("day",">=",aCut).onSnapshot(snap=>{ if(demo) return; const o={}; snap.docs.forEach(x=>{o[x.id]=x.data();}); M.audit=o; render(); },onDbErr);
     db.collection("members").onSnapshot(snap=>{ const o={}; snap.docs.forEach(x=>{o[x.id]=x.data();}); M.members=o; membersLoaded=true;
