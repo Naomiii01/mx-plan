@@ -2399,7 +2399,9 @@ async function handleFiles(files,forced){
   try{
     for(const f of files){
       if(/\.pdf$/i.test(f.name)||f.type==="application/pdf"){ leaveDemo(); await importMxPdf(f); continue; }
-      let wb; try{wb=await readBook(f);}catch(e){showMsg("無法讀取檔案",`<p>${esc(f.name)} 不是可讀取的 Excel 檔（${esc(e.message)}）。</p>`);continue;}
+      let wb; try{wb=await readBook(f);}catch(e){ if(/encrypt|password|EncryptionInfo/i.test(String(e&&e.message)))
+        showMsg("檔案有加密保護",`<p>「${esc(f.name)}」有公司的加密保護（敏感度標籤或密碼），只有 Excel 打得開，網頁讀不到。</p><p>可以用沒有加密的版本；或在 Excel 開啟後「檔案 → 另存新檔」，存檔類型選「CSV UTF-8」（只存目前的工作表）再匯入。是否可另存為未加密版本，請依公司規定。</p>`);
+      else showMsg("無法讀取檔案",`<p>${esc(f.name)} 不是可讀取的 Excel 檔（${esc(e.message)}）。</p>`); continue;}
       if(isFlightBook(wb)){ leaveDemo(); await importFlights(f); continue; }
       if(isCapBook(wb)){ const r=importCap(wb,f.name); if(!r.ok&&r.msg){ showMsg("無法匯入外站清單",`<p>${esc(r.msg)}</p>`); continue; }
         const old=(M.stncap||{})[r.st]; if(old&&!await confirmDlg(`更新 ${r.st} 可執行清單`,`<p>「${esc(f.name)}」：${r.n} 張工卡${r.ns?`、常備物料 ${r.ns} 項`:""}。<br>會取代目前的 ${r.st} 清單（${esc(old.file||"")}，${Object.keys(old.cards||{}).length} 張）。</p>`,"取代")) continue;
