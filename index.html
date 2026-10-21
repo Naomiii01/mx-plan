@@ -3888,14 +3888,14 @@ function kpiData(ms){
   const styMHs=[]; SR.filter(r=>STY_RE.test(String(r.it.task||""))&&mhNum(r.it.mh)).forEach(r=>styMHs.push(mhNum(r.it.mh))); const styAvg=styMHs.length?styMHs.reduce((a,b)=>a+b,0)/styMHs.length:0;
   const ld=lastDoneImport(); const cut=ld?localDay(ld):T;  // 完工檔匯入日：之後到期的，等下一次完工檔再判斷
   const isSh=w=>!!(w.short||w.shortQueue)||taskKeys(w).some(k=>shortKey.has(w.tail+"|"+k));
-  const M_={cut}; ms.forEach(m=>M_[m]={miss:[],late:[],dup:[],done:0,mh:0,unk:0,byType:{},src:{月計畫:0,臨時加工:0,短天期:0},rt:0,rtMH:0,sty:0,styMH:0,ret:{A321:[],A330:[]},doneAB:{A321:0,A330:0}});
+  const M_={cut}; ms.forEach(m=>M_[m]={miss:[],wait:[],late:[],dup:[],done:0,mh:0,unk:0,byType:{},src:{月計畫:0,臨時加工:0,短天期:0},rt:0,rtMH:0,sty:0,styMH:0,ret:{A321:[],A330:[]},doneAB:{A321:0,A330:0}});
   const inM=d=>d&&M_[d.slice(0,7)];
   // 1. 漏派：到期日落在該月、到期前沒有完工（逾期未完工／逾期才完工）。暫緩（修管決定）、併 HMV、刪除、無 WO 不算
   // 短天期（週期／INTERVAL 管控）：只看當期 WO 的 INTERVAL DUE（工單包上的 DUE DATE 對短天期沒有意義）
   for(const w of all){ if(w.removed||w.noWo||w.st==="hmv"||w.st==="queue"||(w.hold&&w.holdR&&w.holdR.wt)) continue;
     const sh=isSh(w); if(sh&&!w.short) continue;
     const lim=sh?(w.short.hard||w.hardD||""):(w.effDue||w.due||""); if(!lim||lim>=cut) continue; const o=inM(lim); if(!o) continue;
-    if(w.st!=="done") o.miss.push({w,lim}); else if(!sh&&w.doneDate&&w.doneDate>lim) o.late.push({w,lim}); }
+    if(w.st!=="done"){ if(w.wm||w.st==="wait") (o.wait=o.wait||[]).push({w,lim}); else o.miss.push({w,lim}); } else if(!sh&&w.doneDate&&w.doneDate>lim) o.late.push({w,lim}); }
   // 2. 重複派工：完工檔中同機號、同卡號（同 S/N）在 7 天內由不同 WO 各做一次（短天期、例行、STAYOVER 本來就會重複，不算）
   // 只看月計畫／臨時加工裡「非週期性」的卡號：完工檔 60 天內做了 3 次以上的卡號視為週期性工作，不列入
   const planKey=new Set(); all.forEach(w=>{ if(!w.noWo&&!w.removed&&!isSh(w)) taskKeys(w).forEach(k=>planKey.add(w.tail+"|"+k)); });
@@ -3956,6 +3956,7 @@ function renderKpi(){
     <p class="muted" style="font-size:12px;margin:6px 0 14px">退工率＝退工次數 ÷ 該機型當月完工工單張數。漏派不含：修管暫緩、併 HMV、已刪除、無 WO、依 FH/FC 無日期的工單；短天期以當期 INTERVAL DUE 判斷。重複派工＝月計畫／臨時工單的卡號，完工檔中同機號（同 S/N）7 天內由不同 WO 各做一次（週期性工作不列）。</p>
     <div class="kp-d"><h3>${+sel.slice(5)} 月明細</h3>
       <details open><summary><b>漏派：到期未完工</b> <span class="mini ${o.miss.length?"warn":"ok"}">${o.miss.length}</span></summary>${wl(o.miss)}</details>
+      ${o.wait.length?`<details><summary><b>待料／待工具（修管通知，不計入漏派）</b> <span class="mini">${o.wait.length}</span></summary>${wl(o.wait)}</details>`:""}
       <details ${o.late.length?"open":""}><summary><b>逾期才完工</b> <span class="mini ${o.late.length?"warn":"ok"}">${o.late.length}</span></summary>${wl(o.late)}</details>
       <details ${o.dup.length?"open":""}><summary><b>重複派工</b> <span class="mini ${o.dup.length?"warn":"ok"}">${o.dup.length}</span></summary>${dl}</details>
       <details open><summary><b>A321／A330 退工原因</b> <span class="mini">${o.ret.A321.length+o.ret.A330.length}</span>${o.retX?` <span class="muted" style="font-size:12px">另有人力調度 ${o.retX} 筆（有登錄，不計入）</span>`:""}</summary><div class="kp-r">${["A321","A330"].map(ty=>`<div><b>${ty}</b>　${o.ret[ty].length} 次${reasons(ty).map(([k,n])=>`<div class="kp-rr"><span>${esc(k)}</span><i style="--w:${Math.round(n/Math.max(1,o.ret[ty].length)*100)}%"></i><b class="mono">${n}</b></div>`).join("")||`<p class="ok-l">✓ 沒有</p>`}</div>`).join("")}</div></details>
@@ -3973,7 +3974,7 @@ async function exportKpi(H,D_,inc){
   const R=(l,f)=>[l,...ms.map(m=>f(D_[m])),ms.reduce((a,m)=>a+(+f(D_[m])||0),0)];
   const rate=ty=>o=>o.doneAB[ty]?Math.round(o.ret[ty].length/o.doneAB[ty]*1000)/10+"%":"";
   const A=[[`${H.y} ${H.h==="H1"?"上半年":"下半年"} 考核統計（資料自 2026/09 起）`],[],["項目",...ms.map(m=>m.replace("-","/")),"合計"],
-    ["① 月控無漏派、無重複派工"],R("漏派：到期未完工",o=>o.miss.length),R("逾期才完工",o=>o.late.length),R("重複派工（7 天內同卡重做）",o=>o.dup.length),
+    ["① 月控無漏派、無重複派工"],R("漏派：到期未完工",o=>o.miss.length),R("待料／待工具（不計入）",o=>o.wait.length),R("逾期才完工",o=>o.late.length),R("重複派工（7 天內同卡重做）",o=>o.dup.length),
     ["② 派工量與全機隊工時"],R("完工工單（張）",o=>o.done),R("　月計畫",o=>o.src.月計畫),R("　短天期",o=>o.src.短天期),R("　臨時加工",o=>o.src.臨時加工),
     R("工單工時 MH",o=>fx(o.mh)),...types.map(t=>R("　"+t+" MH",o=>fx((o.byType[t]||{mh:0}).mh))),R("例行短天期 MH",o=>o.rtMH),R("STAYOVER MH",o=>o.styMH),R("總工時 MH（含例行＋STY）",o=>fx(o.mh+o.rtMH+o.styMH)),R("無工時資料（張）",o=>o.unk),
     ["③ A321／A330 退工"],R("A321 退工（次）",o=>o.ret.A321.length),R("A330 退工（次）",o=>o.ret.A330.length),["A321 退工率",...ms.map(m=>rate("A321")(D_[m]))],["A330 退工率",...ms.map(m=>rate("A330")(D_[m]))],
