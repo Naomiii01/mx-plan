@@ -644,6 +644,14 @@ body.v-stn .wrap>section.blk:not(#secStn),body.v-stn #drop{display:none}
 body:not(.v-stn) #secStn{display:none}
 body.v-dsp .wrap>section.blk:not(#secDsp),body.v-dsp #drop{display:none}
 body.v-pri .wrap>section.blk:not(#secPri),body.v-pri #drop{display:none}
+body.v-kpi .wrap>section.blk:not(#secKpi),body.v-kpi #drop{display:none}body:not(.v-kpi) #secKpi{display:none}
+.kp-t{width:100%;border-collapse:collapse;font-size:13px}.kp-t th,.kp-t td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}.kp-t tbody th{text-align:left;font-weight:500}
+.kp-t thead th{background:var(--panel-2);font-size:12.5px}.kp-t thead th:first-child{text-align:left}.kp-t .on{background:color-mix(in srgb,var(--accent) 9%,transparent)}.kp-t .tot{font-weight:700}
+.kp-t tr.grp th{background:var(--panel-2);font-weight:700;text-align:left;font-size:12.5px;color:var(--ink-2)}.kp-t tr.sub th,.kp-t tr.sub td{color:var(--ink-2);font-size:12.5px}.kp-t td.neg{color:var(--red);font-weight:700}
+.kp-d details{border:1px solid var(--line);border-radius:10px;margin:8px 0;background:var(--panel)}.kp-d summary{cursor:pointer;padding:9px 12px}.kp-d .tbl-wrap,.kp-d .kp-r,.kp-d .ok-l{margin:0 12px 12px}
+.kp-l{width:100%;border-collapse:collapse;font-size:12.5px}.kp-l th,.kp-l td{padding:5px 8px;border-top:1px solid var(--line);text-align:left}.ok-l{color:#5E8A6A;font-size:13px}
+.kp-r{display:grid;grid-template-columns:1fr 1fr;gap:16px}.kp-rr{display:grid;grid-template-columns:150px 1fr 30px;gap:8px;align-items:center;font-size:12.5px;margin-top:4px}.kp-rr i{display:block;height:8px;border-radius:4px;background:var(--accent);width:var(--w);opacity:.7}
+@media (max-width:700px){.kp-r{grid-template-columns:1fr}}
 body:not(.v-pri) #secPri{display:none}
 .mini.pri-pl{background:var(--accent-soft,#e8eef7);color:var(--accent,#2f5d8a);border-color:transparent}
 .mini.pri-mx{background:var(--amber-soft);color:var(--amber);border-color:transparent}
@@ -954,9 +962,10 @@ body:not(.v-dsp) #secDsp{display:none}
 
   <section class="gate" id="gate" hidden></section>
   <div id="banners"></div>
-  <nav class="vtabs" id="vtabs" aria-label="檢視"><button data-view="day">今日控管 <span class="ct"></span></button><button data-view="stn">駐站</button><button data-view="pri">優先排工</button><button data-view="dsp">派遣檢查</button><button data-view="load">月負荷</button><button data-view="month">月計畫總覽</button><div class="gsearch"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input type="search" id="gq" placeholder="搜尋 WO／卡號／機號／工作名稱" aria-label="搜尋工單" autocomplete="off"><div class="gres" id="gres" hidden></div></div></nav>
+  <nav class="vtabs" id="vtabs" aria-label="檢視"><button data-view="day">今日控管 <span class="ct"></span></button><button data-view="stn">駐站</button><button data-view="pri">優先排工</button><button data-view="dsp">派遣檢查</button><button data-view="load">月負荷</button><button data-view="month">月計畫總覽</button><button data-view="kpi">考核統計</button><div class="gsearch"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input type="search" id="gq" placeholder="搜尋 WO／卡號／機號／工作名稱" aria-label="搜尋工單" autocomplete="off"><div class="gres" id="gres" hidden></div></div></nav>
   <section class="blk" id="secDay"></section>
   <section class="blk" id="secLoad"></section>
+  <section class="blk" id="secKpi"></section>
   <section class="blk" id="secStn"></section>
   <section class="blk" id="secDsp"></section>
   <section class="blk" id="secPri"></section>
@@ -3030,8 +3039,8 @@ function renderNow(){
   const af=[]; if(ui.tail) af.push(["tail","機號 "+ui.tail]); if(ui.status) af.push(["status",ST[ui.status].t]); if(ui.check){const c=checksOf(all).find(c=>c.k===ui.check); if(c) af.push(["check",c.t]);}
   $("#activeF").innerHTML=af.map(([k,t])=>`<button class="tag" data-clr="${k}">${esc(t)}</button>`).join("");
   document.querySelectorAll("th.sortable").forEach(th=>{const base=th.textContent.replace(/ [▲▼]$/,""); th.textContent=base+(th.dataset.k===ui.sort?(ui.dir>0?" ▲":" ▼"):"");});
-  renderDay(); renderLoad(); renderStn(); renderDsp(); renderPri();
-  document.body.classList.toggle("v-day",ui.view==="day"); document.body.classList.toggle("v-load",ui.view==="load"); document.body.classList.toggle("v-month",ui.view==="month"); document.body.classList.toggle("v-stn",ui.view==="stn"); document.body.classList.toggle("v-dsp",ui.view==="dsp"); document.body.classList.toggle("v-pri",ui.view==="pri");
+  renderDay(); renderLoad(); renderStn(); renderDsp(); renderPri(); renderKpi();
+  document.body.classList.toggle("v-day",ui.view==="day"); document.body.classList.toggle("v-load",ui.view==="load"); document.body.classList.toggle("v-month",ui.view==="month"); document.body.classList.toggle("v-stn",ui.view==="stn"); document.body.classList.toggle("v-dsp",ui.view==="dsp"); document.body.classList.toggle("v-pri",ui.view==="pri"); document.body.classList.toggle("v-kpi",ui.view==="kpi");
   document.querySelectorAll("#vtabs [data-view]").forEach(b=>{ b.classList.toggle("on",b.dataset.view===ui.view); if(b.dataset.view==="day"){ const n=all.filter(w=>w.st==="past"||(w.st==="over"&&!w.hold)||pzAlert(w)).length; b.querySelector(".ct").textContent=n||""; } });
   if(ui.view!=="month") return;
   renderTable(all);
@@ -3710,6 +3719,121 @@ function renderShort(){
       <td class="s-rem" style="min-width:120px">${r.hmv?`<span class="mini hmvt">HMV 中，暫停計算（預計 RELEASE ${esc(fmtD(r.hmv.end||"").slice(5)||"未定")}）</span>`:""}${r.miss.map(m=>`<span class="mini warn">${esc(m)}</span>`).join("")}${euro}</td></tr>`;}).join("");
   el.innerHTML=`<div class="fleet-tabs">${tabs}${canWrite!==false?`<button class="btn sm" data-firstplan style="margin-left:auto" title="新交機、還沒有任何上次完工的飛機：排定各短天期第一次執行日">新機首次排定</button>`:""}</div><div class="tbl-wrap"><table class="short-t"><thead><tr><th>機號</th><th>工項</th><th>間隔</th><th>週期</th><th>上次完工</th><th>預排日（週期）</th><th>DUE（間隔）</th><th>當期 WO</th><th>提醒</th></tr></thead><tbody>${rows||`<tr><td colspan="9"><div class="empty">沒有符合的工項</div></td></tr>`}</tbody></table>${L.length>300?`<div class="pager">只顯示前 300 項，請選擇機型或機號縮小範圍。</div>`:""}</div>`;
 }
+/* =====================================================================
+   考核統計 — half-year review: 漏派／重複派工、月計畫派工與全機隊工時、A321／A330 退工（資料自 2026/09 起）
+   ===================================================================== */
+const KPI_FROM="2026-09";
+const mhNum=v=>{ const s=String(v??"").trim(); if(!s) return null; if(/^[\d.]+\s*[*xX×]\s*[\d.]+$/.test(s)){ const [a,b]=s.split(/[*xX×]/).map(Number); return a*b; } const n=parseFloat(s); return isNaN(n)?null:n; };
+function kpiMonths(){ const T=todayISO().slice(0,7); const out=[]; let m=KPI_FROM; while(m<=T){ out.push(m); const [y,mo]=m.split("-").map(Number); m=mo===12?`${y+1}-01`:`${y}-${String(mo+1).padStart(2,"0")}`; } return out; }
+function kpiHalves(){ const H={}; kpiMonths().forEach(m=>{ const y=m.slice(0,4), h=+m.slice(5,7)<=6?"H1":"H2"; (H[y+h]=H[y+h]||{k:y+h,y,h,ms:[]}).ms.push(m); }); return Object.values(H).sort((a,b)=>a.k<b.k?-1:1); }
+function kpiData(ms){
+  const D=derive(), all=D.all, T=todayISO(), SR=D.shortRows;
+  const shortKey=new Set(SR.map(r=>r.tail+"|"+String(r.it.task||"").toUpperCase()));
+  const rtItem={}; SR.filter(r=>r.it.routine).forEach(r=>rtItem[r.tail+"|"+String(r.it.task||"").toUpperCase()]=r.it);
+  const styMHs=[]; SR.filter(r=>STY_RE.test(String(r.it.task||""))&&mhNum(r.it.mh)).forEach(r=>styMHs.push(mhNum(r.it.mh))); const styAvg=styMHs.length?styMHs.reduce((a,b)=>a+b,0)/styMHs.length:0;
+  const ld=lastDoneImport(); const cut=ld?localDay(ld):T;  // 完工檔匯入日：之後到期的，等下一次完工檔再判斷
+  const isSh=w=>!!(w.short||w.shortQueue)||taskKeys(w).some(k=>shortKey.has(w.tail+"|"+k));
+  const M_={cut}; ms.forEach(m=>M_[m]={miss:[],late:[],dup:[],done:0,mh:0,unk:0,byType:{},src:{月計畫:0,臨時加工:0,短天期:0},rt:0,rtMH:0,sty:0,styMH:0,ret:{A321:[],A330:[]},doneAB:{A321:0,A330:0}});
+  const inM=d=>d&&M_[d.slice(0,7)];
+  // 1. 漏派：到期日落在該月、到期前沒有完工（逾期未完工／逾期才完工）。暫緩（修管決定）、併 HMV、刪除、無 WO 不算
+  // 短天期（週期／INTERVAL 管控）：只看當期 WO 的 INTERVAL DUE（工單包上的 DUE DATE 對短天期沒有意義）
+  for(const w of all){ if(w.removed||w.noWo||w.st==="hmv"||w.st==="queue"||(w.hold&&w.holdR&&w.holdR.wt)) continue;
+    const sh=isSh(w); if(sh&&!w.short) continue;
+    const lim=sh?(w.short.hard||w.hardD||""):(w.effDue||w.due||""); if(!lim||lim>=cut) continue; const o=inM(lim); if(!o) continue;
+    if(w.st!=="done") o.miss.push({w,lim}); else if(!sh&&w.doneDate&&w.doneDate>lim) o.late.push({w,lim}); }
+  // 2. 重複派工：完工檔中同機號、同卡號（同 S/N）在 7 天內由不同 WO 各做一次（短天期、例行、STAYOVER 本來就會重複，不算）
+  // 只看月計畫／臨時加工裡「非週期性」的卡號：完工檔 60 天內做了 3 次以上的卡號視為週期性工作，不列入
+  const planKey=new Set(); all.forEach(w=>{ if(!w.noWo&&!w.removed&&!isSh(w)) taskKeys(w).forEach(k=>planKey.add(w.tail+"|"+k)); });
+  for(const [k,L] of Object.entries(D.cardDone||{})){ const [tail,card]=k.split("|"); const CU=String(card||"").toUpperCase();
+    if(!card||!planKey.has(tail+"|"+CU)||STY_RE.test(CU)||shortKey.has(tail+"|"+CU)||rtItem[tail+"|"+CU]) continue;
+    const S=[...new Map(L.filter(c=>c.date).map(c=>[c.wo+"|"+c.date,c])).values()].sort((a,b)=>a.date<b.date?-1:1);
+    if(S.some((c,i)=>i>=2&&daysBetween(S[i-2].date,c.date)<=60)) continue;
+    for(let i=1;i<S.length;i++){ const a=S[i-1], b=S[i]; if(a.wo===b.wo) continue; if((a.sn||"")!==(b.sn||"")&&a.sn&&b.sn) continue; if(daysBetween(a.date,b.date)<=7){ const o=inM(b.date); if(o) o.dup.push({tail,card,a,b}); } } }
+  // 3. 派工量與工時：該月完工的工單（月計畫、臨時加工、短天期）
+  for(const w of all){ if(w.st!=="done"||w.removed) continue; const d=w.doneDate||w.sched; const o=inM(d); if(!o) continue;
+    const h=mhOf(w); o.done++; if(h==null) o.unk++; else o.mh+=h; const ty=w.type||typeOf(w.tail); const b=o.byType[ty]=o.byType[ty]||{n:0,mh:0}; b.n++; b.mh+=h||0;
+    o.src[isSh(w)?"短天期":w.adhoc?"臨時加工":"月計畫"]++; if(ty==="A321"||ty==="A330") o.doneAB[ty]++; }
+  // 例行短天期、STAYOVER：依完工檔
+  for(const [k,L] of Object.entries(D.cardDone||{})){ const [tail,card]=k.split("|"); const CU=String(card||"").toUpperCase(); const isSty=STY_RE.test(CU), it=rtItem[tail+"|"+CU]; if(!isSty&&!it) continue;
+    const seen=new Set(); for(const c of L){ const key=c.wo+"|"+c.date; if(seen.has(key)) continue; seen.add(key); const o=inM(c.date); if(!o) continue;
+      if(isSty){ o.sty++; o.styMH+=styAvg; } else { o.rt++; o.rtMH+=mhNum(it.mh)||0; } } }
+  // 4. 退工（A321／A330）
+  for(const x of recList("returns")){ const o=inM(x.date); if(!o) continue; const ty=x.type||typeOf(x.tail); if(ty==="A321"||ty==="A330") o.ret[ty].push(x); }
+  ms.forEach(m=>{ const o=M_[m]; ["mh","rtMH","styMH"].forEach(k=>o[k]=Math.round(o[k]*10)/10); Object.values(o.byType).forEach(b=>b.mh=Math.round(b.mh*10)/10); });
+  return M_;
+}
+function renderKpi(){
+  const el=$("#secKpi"); if(!el||ui.view!=="kpi") return;
+  const HV=kpiHalves(); if(!HV.length){ el.innerHTML=`<div class="empty">還沒有資料</div>`; return; }
+  const hk=ui.kpiH&&HV.some(h=>h.k===ui.kpiH)?ui.kpiH:HV[HV.length-1].k; const H=HV.find(h=>h.k===hk); const ms=H.ms;
+  const D_=kpiData(ms); const inc=!!ui.kpiAll;
+  const sel=ui.kpiM&&ms.includes(ui.kpiM)?ui.kpiM:ms[ms.length-1];
+  const sum=f=>ms.reduce((a,m)=>a+f(D_[m]),0);
+  const fx=v=>Math.round(v*10)/10;
+  const types=["A321","A330","A359","A351"];
+  const totMH=o=>fx(o.mh+(inc?o.rtMH+o.styMH:0));
+  const row=(lbl,f,opt={})=>`<tr class="${opt.cls||""}"><th>${lbl}</th>${ms.map(m=>{ const v=f(D_[m]); return `<td class="mono ${opt.bad&&v>0?"neg":""} ${m===sel?"on":""}">${v===""?"—":v}</td>`; }).join("")}<td class="mono tot ${opt.bad&&sum(f)>0?"neg":""}">${opt.noSum?"":fx(sum(o=>+f(o)||0))}</td></tr>`;
+  const rate=ty=>o=>o.doneAB[ty]?(Math.round(o.ret[ty].length/o.doneAB[ty]*1000)/10)+"%":"—";
+  const curM=todayISO().slice(0,7);
+  const o=D_[sel];
+  const wl=L=>L.length?`<div class="tbl-wrap"><table class="kp-l"><tr><th>機號</th><th>WO</th><th>卡號／工作</th><th>到期</th><th>完工</th></tr>${L.sort((a,b)=>a.lim<b.lim?-1:1).map(({w,lim})=>`<tr><td class="mono">${esc(w.tail)}</td><td><button class="wo-link mono" data-hist="${esc(w.wo)}">${esc(w.wo)}</button></td><td><b class="mono">${esc(cardOf(w))}</b> <span class="muted">${esc((w.title||"").slice(0,50))}</span></td><td class="mono">${esc(fmtD(lim))}</td><td class="mono">${w.doneDate?esc(fmtD(w.doneDate)):`<span class="neg">未完工</span>`}</td></tr>`).join("")}</table></div>`:`<p class="ok-l">✓ 沒有</p>`;
+  const dl=o.dup.length?`<div class="tbl-wrap"><table class="kp-l"><tr><th>機號</th><th>卡號</th><th>第一次</th><th>第二次</th></tr>${o.dup.map(x=>`<tr><td class="mono">${esc(x.tail)}</td><td class="mono">${esc(x.card)}${x.b.sn?` <span class="muted">S/N ${esc(x.b.sn)}</span>`:""}</td><td class="mono">WO ${esc(x.a.wo)} · ${esc(fmtD(x.a.date))}</td><td class="mono">WO ${esc(x.b.wo)} · ${esc(fmtD(x.b.date))}</td></tr>`).join("")}</table></div>`:`<p class="ok-l">✓ 沒有</p>`;
+  const reasons=ty=>{ const c={}; o.ret[ty].forEach(x=>c[x.reason||"其他"]=(c[x.reason||"其他"]||0)+1); return Object.entries(c).sort((a,b)=>b[1]-a[1]); };
+  el.innerHTML=`<div class="blk-h"><h2>考核統計</h2><span class="hint">資料自 2026/09 起（開始使用本系統）。完工、漏派、重複都依已匯入的完工檔判斷（目前截至 ${esc(fmtD(D_.cut))}），之後到期的等下次完工檔匯入再算。</span></div>
+    <div class="d-bar"><div class="seg">${HV.map(h=>`<button class="chip ${h.k===hk?"on":""}" data-kph="${h.k}">${h.y} ${h.h==="H1"?"上半年":"下半年"}</button>`).join("")}</div>
+      <label class="l-sty"><input type="checkbox" id="kpAll" ${inc?"checked":""}> 工時含例行短天期與 STAYOVER</label><button class="btn" id="kpXl" style="margin-left:auto">匯出 Excel</button></div>
+    <div class="tbl-wrap"><table class="kp-t"><thead><tr><th>項目</th>${ms.map(m=>`<th class="${m===sel?"on":""}"><button class="linkish" data-kpm="${m}">${+m.slice(5)} 月${m===curM?"（進行中）":""}</button></th>`).join("")}<th>合計</th></tr></thead><tbody>
+      <tr class="grp"><th colspan="${ms.length+2}">① 月控無漏派、無重複派工（目標 0）</th></tr>
+      ${row("漏派：到期未完工",o=>o.miss.length,{bad:1})}
+      ${row("逾期才完工",o=>o.late.length,{bad:1})}
+      ${row("重複派工（7 天內同卡重做）",o=>o.dup.length,{bad:1})}
+      <tr class="grp"><th colspan="${ms.length+2}">② 派工量與全機隊工時</th></tr>
+      ${row("完工工單（張）",o=>o.done)}
+      ${row("　月計畫",o=>o.src.月計畫,{cls:"sub"})}${row("　短天期",o=>o.src.短天期,{cls:"sub"})}${row("　臨時加工",o=>o.src.臨時加工,{cls:"sub"})}
+      ${row(inc?"總工時 MH（含例行＋STY）":"工單工時 MH",totMH)}
+      ${types.map(t=>row("　"+t+" MH",o=>fx((o.byType[t]||{mh:0}).mh),{cls:"sub"})).join("")}
+      ${inc?row("　例行短天期 MH",o=>o.rtMH,{cls:"sub"})+row("　STAYOVER MH（"+"次數×平均）",o=>o.styMH,{cls:"sub"}):""}
+      ${row("無工時資料（張）",o=>o.unk,{cls:"sub"})}
+      <tr class="grp"><th colspan="${ms.length+2}">③ A321／A330 退工</th></tr>
+      ${row("A321 退工（次）",o=>o.ret.A321.length)}${row("A330 退工（次）",o=>o.ret.A330.length)}
+      ${row("A321 退工率",rate("A321"),{noSum:1})}${row("A330 退工率",rate("A330"),{noSum:1})}
+    </tbody></table></div>
+    <p class="muted" style="font-size:12px;margin:6px 0 14px">退工率＝退工次數 ÷ 該機型當月完工工單張數。漏派不含：修管暫緩、併 HMV、已刪除、無 WO、依 FH/FC 無日期的工單；短天期以當期 INTERVAL DUE 判斷。重複派工＝月計畫／臨時工單的卡號，完工檔中同機號（同 S/N）7 天內由不同 WO 各做一次（週期性工作不列）。</p>
+    <div class="kp-d"><h3>${+sel.slice(5)} 月明細</h3>
+      <details open><summary><b>漏派：到期未完工</b> <span class="mini ${o.miss.length?"warn":"ok"}">${o.miss.length}</span></summary>${wl(o.miss)}</details>
+      <details ${o.late.length?"open":""}><summary><b>逾期才完工</b> <span class="mini ${o.late.length?"warn":"ok"}">${o.late.length}</span></summary>${wl(o.late)}</details>
+      <details ${o.dup.length?"open":""}><summary><b>重複派工</b> <span class="mini ${o.dup.length?"warn":"ok"}">${o.dup.length}</span></summary>${dl}</details>
+      <details open><summary><b>A321／A330 退工原因</b> <span class="mini">${o.ret.A321.length+o.ret.A330.length}</span></summary><div class="kp-r">${["A321","A330"].map(ty=>`<div><b>${ty}</b>　${o.ret[ty].length} 次${reasons(ty).map(([k,n])=>`<div class="kp-rr"><span>${esc(k)}</span><i style="--w:${Math.round(n/Math.max(1,o.ret[ty].length)*100)}%"></i><b class="mono">${n}</b></div>`).join("")||`<p class="ok-l">✓ 沒有</p>`}</div>`).join("")}</div></details>
+    </div>`;
+  el.querySelectorAll("[data-kph]").forEach(b=>b.onclick=()=>{ ui.kpiH=b.dataset.kph; ui.kpiM=""; renderKpi(); });
+  el.querySelectorAll("[data-kpm]").forEach(b=>b.onclick=()=>{ ui.kpiM=b.dataset.kpm; renderKpi(); });
+  $("#kpAll").onchange=e=>{ ui.kpiAll=e.target.checked; renderKpi(); };
+  $("#kpXl").onclick=()=>exportKpi(H,D_,inc);
+}
+async function exportKpi(H,D_,inc){
+  if(!window.XLSX){ toast("Excel 元件尚未載入"); return; }
+  const ms=H.ms, wb=XLSX.utils.book_new(); const fx=v=>Math.round(v*10)/10;
+  const hdr=(ws,n,r0=0)=>{ for(let c=0;c<n;c++){ const r=XLSX.utils.encode_cell({r:r0,c}); if(ws[r]) ws[r].s={font:{bold:true,color:{rgb:"FFFFFF"}},fill:{fgColor:{rgb:"8C7266"}}}; } };
+  const types=["A321","A330","A359","A351"];
+  const R=(l,f)=>[l,...ms.map(m=>f(D_[m])),ms.reduce((a,m)=>a+(+f(D_[m])||0),0)];
+  const rate=ty=>o=>o.doneAB[ty]?Math.round(o.ret[ty].length/o.doneAB[ty]*1000)/10+"%":"";
+  const A=[[`${H.y} ${H.h==="H1"?"上半年":"下半年"} 考核統計（資料自 2026/09 起）`],[],["項目",...ms.map(m=>m.replace("-","/")),"合計"],
+    ["① 月控無漏派、無重複派工"],R("漏派：到期未完工",o=>o.miss.length),R("逾期才完工",o=>o.late.length),R("重複派工（7 天內同卡重做）",o=>o.dup.length),
+    ["② 派工量與全機隊工時"],R("完工工單（張）",o=>o.done),R("　月計畫",o=>o.src.月計畫),R("　短天期",o=>o.src.短天期),R("　臨時加工",o=>o.src.臨時加工),
+    R("工單工時 MH",o=>fx(o.mh)),...types.map(t=>R("　"+t+" MH",o=>fx((o.byType[t]||{mh:0}).mh))),R("例行短天期 MH",o=>o.rtMH),R("STAYOVER MH",o=>o.styMH),R("總工時 MH（含例行＋STY）",o=>fx(o.mh+o.rtMH+o.styMH)),R("無工時資料（張）",o=>o.unk),
+    ["③ A321／A330 退工"],R("A321 退工（次）",o=>o.ret.A321.length),R("A330 退工（次）",o=>o.ret.A330.length),["A321 退工率",...ms.map(m=>rate("A321")(D_[m]))],["A330 退工率",...ms.map(m=>rate("A330")(D_[m]))],
+    [],["說明：漏派不含修管暫緩、併 HMV、已刪除、無 WO、依 FH/FC 無日期的工單；重複派工＝完工檔中同機號同卡號（同 S/N）7 天內由不同 WO 各做一次，短天期／例行／STAYOVER 不列入；退工率＝退工次數 ÷ 該機型當月完工張數。"]];
+  const ws=XLSX.utils.aoa_to_sheet(A); ws["!cols"]=[{wch:30},...ms.map(()=>({wch:10})),{wch:10}]; hdr(ws,ms.length+2,2); XLSX.utils.book_append_sheet(wb,ws,"考核總表");
+  const LW=k=>{ const rows=[["月份","類別","機號","機型","WO","卡號","工作名稱","到期日","完工日"]]; ms.forEach(m=>D_[m][k].forEach(({w,lim})=>rows.push([m.replace("-","/"),k==="miss"?"到期未完工":"逾期才完工",w.tail,w.type||typeOf(w.tail),w.wo,cardOf(w),w.title||"",fmtD(lim),w.doneDate?fmtD(w.doneDate):""]))); return rows; };
+  const s2=XLSX.utils.aoa_to_sheet([...LW("miss"),...LW("late").slice(1)]); s2["!cols"]=[{wch:9},{wch:12},{wch:10},{wch:7},{wch:10},{wch:22},{wch:50},{wch:12},{wch:12}]; hdr(s2,9); XLSX.utils.book_append_sheet(wb,s2,"漏派明細");
+  const d3=[["月份","機號","卡號","S/N","第一次 WO","第一次日期","第二次 WO","第二次日期"]]; ms.forEach(m=>D_[m].dup.forEach(x=>d3.push([m.replace("-","/"),x.tail,x.card,x.b.sn||"",x.a.wo,fmtD(x.a.date),x.b.wo,fmtD(x.b.date)])));
+  const s3=XLSX.utils.aoa_to_sheet(d3); hdr(s3,8); XLSX.utils.book_append_sheet(wb,s3,"重複派工");
+  const d4=[["月份","機型",...types.map(t=>t+" 張"),...types.map(t=>t+" MH"),"例行 MH","STY MH"]]; ms.forEach(m=>{ const o=D_[m]; d4.push([m.replace("-","/"),"",...types.map(t=>(o.byType[t]||{n:0}).n),...types.map(t=>fx((o.byType[t]||{mh:0}).mh)),o.rtMH,o.styMH]); });
+  const s4=XLSX.utils.aoa_to_sheet(d4); hdr(s4,d4[0].length); XLSX.utils.book_append_sheet(wb,s4,"工時依機型");
+  const RR=ms.flatMap(m=>[...D_[m].ret.A321,...D_[m].ret.A330]); if(RR.length) retSheets(wb,RR,hdr,`${H.y} ${H.h==="H1"?"上半年":"下半年"} A321／A330 退工`);
+  return saveWb(wb,`考核統計_${H.y}${H.h}.xlsx`);
+}
+
 /* 新機首次排定: a newly delivered aircraft has no 上次完工 on any short item — the planner sets the first day; after that the chain plans itself */
 document.body.addEventListener("click",e=>{ const b=e.target.closest("[data-firstplan]"); if(!b) return; e.preventDefault(); firstPlanDlg(b.dataset.firstplan||""); });
 function firstPlanDlg(tail0){
@@ -3784,7 +3908,7 @@ function renderStats(){
   const cnt=(L,f)=>L.filter(f).length;
   const fixSel=x=>canWrite===false?`<span class="mini ${x.status==="fixed"?"":"warn"}">${FIXST[x.status||"todo"]}</span>`:`<select class="fixst" data-fm="${esc((x.date||"").slice(0,7))}" data-fk="${esc(x.id)}" aria-label="工程處理進度">${Object.entries(FIXST).map(([k,l])=>`<option value="${k}" ${k===(x.status||"todo")?"selected":""}>${l}</option>`).join("")}</select>`;
   const fixRows=[...openAll.filter(x=>(x.date||"").slice(0,7)!==ui.statM),...c].sort((a,b)=>((a.status==="fixed")-(b.status==="fixed"))||((b.at||"")<(a.at||"")?-1:1));
-  el.innerHTML=`<div class="filters"><select id="statM" aria-label="統計月份">${months.map(m=>`<option ${m===ui.statM?"selected":""} value="${m}">${m.replace("-","/")}</option>`).join("")}</select>${ui.type||ui.tail?`<span class="seg" role="group" aria-label="統計範圍"><button class="chip ${scoped?"on":""}" data-stall="0">只看 ${esc(ui.tail||ui.type)}</button><button class="chip ${scoped?"":"on"}" data-stall="1">全部機隊</button></span>${scoped&&!r.length&&!c.length?(()=>{ const nR=R.filter(x=>(x.date||"").slice(0,7)===ui.statM).length, nC=C.filter(x=>(x.date||"").slice(0,7)===ui.statM).length; return nR+nC?`<span class="muted" style="font-size:12.5px">（目前只看 ${esc(ui.tail||ui.type)}；全部機隊本月退工 ${nR} 次、改工單 ${nC} 次）</span>`:""; })():""}`:""}</div>
+  el.innerHTML=`<div class="filters"><select id="statM" aria-label="統計月份">${months.map(m=>`<option ${m===ui.statM?"selected":""} value="${m}">${m.replace("-","/")}</option>`).join("")}</select>${ui.type||ui.tail?`<span class="seg" role="group" aria-label="統計範圍"><button class="chip ${scoped?"on":""}" data-stall="0">只看 ${esc(ui.tail||ui.type)}</button><button class="chip ${scoped?"":"on"}" data-stall="1">全部機隊</button></span>${scoped&&!r.length&&!c.length?(()=>{ const nR=R.filter(x=>(x.date||"").slice(0,7)===ui.statM).length, nC=C.filter(x=>(x.date||"").slice(0,7)===ui.statM).length; return nR+nC?`<span class="muted" style="font-size:12.5px">（目前只看 ${esc(ui.tail||ui.type)}；全部機隊本月退工 ${nR} 次、改工單 ${nC} 次）</span>`:""; })():""}`:""}<button class="btn sm" id="statXl" style="margin-left:auto" title="下載這個月份的退工紀錄 Excel">匯出 ${esc(ui.statM.replace("-","/"))} 退工</button></div>
     <div class="stat2">
       <div class="imp-card"><h3>退工 <span>${esc(ui.statM.replace("-","/"))}</span></h3><div class="big" style="color:var(--red)">${r.length}<small style="font-size:14px;color:var(--ink-3)"> 次 · ${new Set(r.map(x=>x.wo)).size} 張工單</small></div><div style="font-size:12.5px;color:var(--ink-2)">${byType(r)}</div>${bars(r,x=>[x.reason])}</div>
       <div class="imp-card"><h3>改工單 <span>${esc(ui.statM.replace("-","/"))}</span></h3><div class="big" style="color:var(--amber)">${c.length}<small style="font-size:14px;color:var(--ink-3)"> 次 · ${new Set(c.map(x=>x.wo)).size} 張工單</small></div><div style="font-size:12.5px;color:var(--ink-2)">${byType(c)}</div>
@@ -3794,7 +3918,7 @@ function renderStats(){
     ${fixRows.length?`<h3 style="font-size:14px;margin:14px 0 6px">改工單追蹤${openAll.length?`　<span class="mini warn">全部待工程修正 ${openAll.length}</span>`:""}</h3><div class="tbl-wrap"><table class="audit-t"><thead><tr><th>日期</th><th>WO / 機號</th><th>問題</th><th>說明</th><th>工程處理</th></tr></thead><tbody>${fixRows.map(x=>`<tr><td class="mono a-at">${esc(fmtD(x.date))}</td><td class="a-wo"><button class="wo-link mono" data-hist="${esc(x.wo)}">${esc(x.wo)}</button> <span class="muted">${esc(x.tail||"")}</span>${recCard(x)?`<br><span class="mono muted" style="font-size:11.5px">${esc(recCard(x))}</span>`:""}</td><td class="a-act">${esc(x.reason||"")}</td><td class="a-to">${esc(OUTL[x.outcome]||"")}${x.actH?`　${x.stdH?`工時 ${esc(x.stdH)} → `:"實際需 "}${esc(x.actH)}`:""}${x.note?"　"+esc(x.note):""}${x.ref?`　<span class="mono">${esc(x.ref)}</span>`:""}　<span class="muted">${esc(who(x.by))}</span></td><td class="a-who">${fixSel(x)}</td></tr>`).join("")}</tbody></table></div>`:""}
     ${r.length?`<h3 style="font-size:14px;margin:14px 0 6px">退工紀錄</h3><div class="tbl-wrap"><table class="audit-t"><thead><tr><th>日期</th><th>WO / 機號</th><th>原因</th><th>內容</th></tr></thead><tbody>${r.slice(0,40).map(x=>`<tr><td class="mono a-at">${esc(fmtD(x.date))}</td><td class="a-wo"><button class="wo-link mono" data-hist="${esc(x.wo)}">${esc(x.wo)}</button> <span class="muted">${esc(x.tail||"")}</span>${recCard(x)?`<br><span class="mono muted" style="font-size:11.5px">${esc(recCard(x))}</span>`:""}</td><td class="a-act">${esc(x.reason||"")}</td><td class="a-to">${(()=>{const pg=retProgress(x); return `<span class="mini ${RETC[pg.k]}">${esc(pg.t)}</span> `;})()}${(x.holds||[]).length?`<span class="mini ${clarWait(x)?"warn":""}" title="${esc(x.holds.map(h=>h.tail).join("、"))}">同卡號${clarWait(x)?"暫停":"已恢復"} ${x.holds.length} 架</span> `:""}${x.prevSched?`原排 ${esc(fmtD(x.prevSched))}`:"原未排定"}${x.newSched?" → 改排 "+esc(fmtD(x.newSched)):x.prevSched?"，回到待安排":""}${x.note?"　"+esc(x.note):""}　<span class="muted">${esc(who(x.by))}</span>${(()=>{ const lf=lastFollow(x); return lf?`<br><span style="font-size:12px;color:var(--ink-2)">↳ ${esc(fmtD(lf.date).slice(5))} ${esc(lf.party||"")}${lf.sender?" "+esc(lf.sender):""}：${esc(lf.note||clarLbl(lf))}${(x.follow||[]).length>1?`（共 ${(x.follow||[]).length} 筆進度）`:""}</span>`:""; })()}${canWrite!==false?` <button class="btn ghost" data-follow="${esc(x.id)}" style="padding:1px 8px;font-size:12px">更新進度</button>`:""}</td></tr>`).join("")}</tbody></table></div>`:""}`;
   el.querySelectorAll("[data-stall]").forEach(b=>b.onclick=()=>{ ui.statAll=b.dataset.stall==="1"; renderStats(); });
-  const sm=$("#statM"); if(sm) sm.onchange=e=>{ ui.statM=e.target.value; renderStats(); };
+  const sm=$("#statM"); if(sm) sm.onchange=e=>{ ui.statM=e.target.value; renderStats(); }; const sx=$("#statXl"); if(sx) sx.onclick=()=>exportReturns(ui.statM);
   el.querySelectorAll(".fixst").forEach(s=>s.onchange=()=>setFixStatus(s.dataset.fm,s.dataset.fk,s.value));
 }
 function renderImp(){
