@@ -237,6 +237,7 @@ details.more summary{cursor:pointer;color:var(--ink-2);font-size:13px}
 .sync::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--c,var(--ink-3))}
 .sync.ok{--c:var(--green)} .sync.local{--c:var(--amber)} .sync.wait{--c:var(--ink-3)} .sync.err{--c:var(--red)}
 .imp{display:flex;flex-direction:column;gap:10px}
+textarea.drag{outline:2px dashed var(--accent);outline-offset:2px;background:var(--panel-2)}
 .imp-top{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:stretch}
 .imp-mrow{display:flex;gap:12px;align-items:center;padding:6px 0;border-top:1px dashed var(--line)}.imp-mrow:first-of-type{border-top:0}
 .imp-plan .ty{flex-direction:row;align-items:baseline;gap:6px;min-width:0;padding:4px 9px;white-space:nowrap}.imp-plan .ty b{font-size:14px}.imp-plan .imp-row{flex-wrap:wrap;gap:5px}
@@ -970,7 +971,7 @@ body:not(.v-dsp) #secDsp{display:none}
   <section class="blk" id="secStn"></section>
   <section class="blk" id="secDsp"></section>
   <section class="blk" id="secPri"></section>
-  <div class="drop" id="drop">把 Excel 拖到這裡：工單檔、完工檔，或先前匯出的管控檔（會自動辨識）。臨時加工的信件請按「臨時工單」貼上截圖。</div>
+  <div class="drop" id="drop">把 Excel 拖到這裡：工單檔、完工檔，或先前匯出的管控檔（會自動辨識）。Outlook 另存的信件檔（.txt／.msg／.eml）也可以拖進來，會自動分到「匯入退工」或「臨時工單」。</div>
 
   <section class="blk">
     <div class="blk-h"><h2>匯入狀態</h2><span class="hint">月計畫每月 15–20 日匯入；完工每 7–10 天匯入一次</span></div>
@@ -2227,10 +2228,63 @@ function priTagDlg(wo){ const w=derive().all.find(x=>x.wo===wo); if(!w) return; 
 }
 /* ---------- file entry ---------- */
 let busy=false;
+/* ---------- 信件檔：傳統版 Outlook「另存新檔」的 .txt（可一次多封）、拖出的 .msg、.eml → 跟貼上一樣的文字 ---------- */
+const MAIL_FILE=/\.(txt|msg|eml)$/i; function isMailFile(f){ return MAIL_FILE.test(f&&f.name||""); }
+function decodeTxt(buf){ const u=new Uint8Array(buf);
+  if(u[0]===0xFF&&u[1]===0xFE) return new TextDecoder("utf-16le").decode(u.subarray(2));
+  if(u[0]===0xFE&&u[1]===0xFF) return new TextDecoder("utf-16be").decode(u.subarray(2));
+  try{ return new TextDecoder("utf-8",{fatal:true}).decode(u).replace(/^﻿/,""); }catch(e){}
+  try{ return new TextDecoder("big5").decode(u); }catch(e){ return new TextDecoder("utf-8").decode(u); } }   // Outlook「純文字」預設用 Big5 存
+const htmlText=h=>{ const d=new DOMParser().parseFromString(String(h||""),"text/html"); d.querySelectorAll("br").forEach(b=>b.replaceWith("\n")); d.querySelectorAll("td,th").forEach(e=>e.append("\t")); d.querySelectorAll("p,div,tr,li,h1,h2,h3,table").forEach(e=>e.append("\n"));
+  return (d.body&&d.body.textContent||"").replace(/ /g," ").replace(/[ \t]*\n[ \t]*\n(\s*\n)+/g,"\n\n"); };
+const fmtSent=d=>d&&!isNaN(d)?`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`:"";
+const mailHead=(from,sent,subj)=>`寄件者: ${from||""}\n寄件日期: ${sent||""}\n主旨: ${subj||""}\n\n`;
+let msgLib=null;
+function loadMsgLib(){ return msgLib||(msgLib=new Promise((res,rej)=>{ if(window.MsgReader) return res(window.MsgReader); const sc=document.createElement("script"); sc.src="msgreader.min.js"; sc.onload=()=>res(window.MsgReader); sc.onerror=()=>{ msgLib=null; rej(new Error("無法載入 .msg 讀取元件")); }; document.head.appendChild(sc); })); }
+function emlText(bytes){
+  const bin=Array.from(bytes,b=>String.fromCharCode(b)).join("");
+  const dec=(raw,cs)=>{ const u=Uint8Array.from(raw,c=>c.charCodeAt(0)&255); try{ return new TextDecoder(String(cs||"utf-8").toLowerCase()).decode(u); }catch(e){ return new TextDecoder("utf-8").decode(u); } };
+  const qp=t=>t.replace(/=\r?\n/g,"").replace(/=([0-9A-F]{2})/gi,(m,h)=>String.fromCharCode(parseInt(h,16)));
+  const words=v=>v.replace(/=\?([^?]+)\?([BQ])\?([^?]*)\?=/gi,(m,cs,e,t)=>dec(e.toUpperCase()==="B"?atob(t):qp(t.replace(/_/g," ")),cs)).replace(/\?=\s+=\?/g,"?==?");
+  function part(raw){ const i=raw.search(/\r?\n\r?\n/); const head=(i<0?raw:raw.slice(0,i)).replace(/\r?\n[ \t]+/g," "), body=i<0?"":raw.slice(i).replace(/^\r?\n\r?\n/,"");
+    const H={}; head.split(/\r?\n/).forEach(l=>{ const k=l.indexOf(":"); if(k>0) H[l.slice(0,k).trim().toLowerCase()]=l.slice(k+1).trim(); });
+    const ct=H["content-type"]||"text/plain", cs=(ct.match(/charset="?([^";]+)/i)||[])[1], te=(H["content-transfer-encoding"]||"").toLowerCase();
+    if(/^multipart\//i.test(ct)){ const bd=(ct.match(/boundary="?([^";]+)"?/i)||[])[1]; if(!bd) return {H,text:""}; const P=body.split("--"+bd).slice(1).filter(x=>!/^--/.test(x)).map(x=>part(x.replace(/^\r?\n/,"")));
+      const t=P.find(x=>x.plain)||P.find(x=>x.text); return {H,text:t?t.text:"",plain:!!(t&&t.plain)}; }
+    if(!/^text\//i.test(ct)) return {H,text:""};
+    let raw2=te==="base64"?atob(body.replace(/\s+/g,"")):te==="quoted-printable"?qp(body):body; let txt=dec(raw2,cs);
+    return /html/i.test(ct)?{H,text:htmlText(txt)}:{H,text:txt,plain:true}; }
+  const r=part(bin); const d=r.H.date?new Date(r.H.date):null;
+  return mailHead(words(r.H.from||"").replace(/<[^>]*>/g,"").replace(/"/g,"").trim(),fmtSent(d),words(r.H.subject||""))+r.text; }
+async function readMailFiles(files){ const out=[], bad=[];
+  for(const f of files){ try{ const buf=await f.arrayBuffer();
+      if(/\.txt$/i.test(f.name)) out.push(decodeTxt(buf));
+      else if(/\.eml$/i.test(f.name)) out.push(emlText(new Uint8Array(buf)));
+      else { const R=await loadMsgLib(); const m=new R(buf).getFileData(); if(!m||m.error) throw new Error(m&&m.error||"讀不到內容");
+        const t=m.messageDeliveryTime||m.clientSubmitTime||m.creationTime; const body=m.body||(m.bodyHtml?htmlText(m.bodyHtml):"");
+        out.push(mailHead(m.senderName||m.senderEmail||"",fmtSent(t?new Date(t):null),m.subject||"")+body); } }
+    catch(e){ bad.push(f.name+"（"+(e&&e.message||e)+"）"); } }
+  return {text:out.join("\n\n"),n:out.length,bad}; }
+// 信件檔丟進對話框：讀完接在文字框後面，接著自動解析
+function mailDrop(ta,after,status){ const go=async fs=>{ fs=[...fs].filter(isMailFile); if(!fs.length) return; status&&(status.textContent="讀取信件檔…");
+    const r=await readMailFiles(fs); if(r.text){ ta.value=(ta.value.trim()?ta.value.trim()+"\n\n":"")+r.text; } if(status) status.textContent=`已讀入 ${r.n} 個檔案`+(r.bad.length?`；讀不到：${r.bad.join("、")}`:""); if(r.n) after(); };
+  ta.addEventListener("dragover",e=>{ if([...e.dataTransfer.types].includes("Files")){ e.preventDefault(); e.stopPropagation(); ta.classList.add("drag"); } });
+  ta.addEventListener("dragleave",()=>ta.classList.remove("drag"));
+  ta.addEventListener("drop",e=>{ const fs=[...(e.dataTransfer&&e.dataTransfer.files||[])]; if(!fs.length) return; e.preventDefault(); e.stopPropagation(); ta.classList.remove("drag"); go(fs); });
+  const inp=document.createElement("input"); inp.type="file"; inp.accept=".txt,.msg,.eml"; inp.multiple=true; inp.hidden=true; ta.parentNode.appendChild(inp); inp.onchange=()=>{ go([...inp.files]); inp.value=""; };
+  return ()=>inp.click(); }
+// 主畫面直接拖入信件檔：依內容開「匯入退工」或「臨時工單」
+async function handleMailFiles(fs){ const r=await readMailFiles(fs); if(!r.n){ showMsg("無法讀取信件檔",`<p>${esc(r.bad.join("、"))}</p>`); return; }
+  const M_=LX.mails(r.text), ret=M_.filter(m=>/退工/.test(m.subject+"\n"+m.text)), oth=M_.filter(m=>!/退工/.test(m.subject+"\n"+m.text));
+  let k=ret.length&&!oth.length?"ret":oth.length&&!ret.length?"adhoc":await choiceDlg("這些信件要匯入到哪裡？",`<p>讀到 ${M_.length} 封：退工信 ${ret.length} 封、其他 ${oth.length} 封。</p>`,[["ret","匯入退工",`只帶入 ${ret.length} 封退工信`],["adhoc","臨時工單",`只帶入 ${oth.length} 封非退工信`]],"ret");
+  if(!k) return; const txt=(k==="ret"?ret:oth).map(m=>m.text).join("\n\n");
+  if(k==="ret"){ openRetImport(); const ta=$("#riText"); if(ta){ ta.value=txt; riRead(false); } }
+  else { openAdhoc(); const ta=$("#ahText"); if(ta){ ta.value=txt; readText(); } } }
 async function handleFiles(files,forced){
   if(!window.XLSX){toast("Excel 讀取元件尚未載入，請稍候再試");return;}
   if(canWrite===false){showMsg("沒有編輯權限","<p>你目前只能檢視。請擁有者在「分享」中把你設為「可互動」或「可編輯」。</p>");return;}
   if(busy){toast("上一個檔案還在處理中");return;}
+  { const mf=[...files].filter(isMailFile); if(mf.length){ files=[...files].filter(f=>!isMailFile(f)); await handleMailFiles(mf); if(!files.length) return; } }
   busy=true; setSync(mode==="db"?"wait":"local","處理中…");
   try{
     for(const f of files){
@@ -4175,7 +4229,9 @@ $("#btnSettings").onclick=settingsDlg;
 const drop=$("#drop");
 ["dragenter","dragover"].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over");}));
 ["dragleave","drop"].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault(); if(ev==="drop"||e.target===drop) drop.classList.remove("over");}));
-document.addEventListener("drop",e=>{const f=[...(e.dataTransfer&&e.dataTransfer.files||[])]; if(!f.length) return; if(AH){ addImgs(f.filter(x=>x.type.startsWith("image/"))); return; } if(f.every(x=>x.type.startsWith("image/"))){ openAdhoc(); setTimeout(()=>addImgs(f),0); return; } handleFiles(f);});
+document.addEventListener("drop",e=>{const f=[...(e.dataTransfer&&e.dataTransfer.files||[])]; if(!f.length) return;
+  { const mf=f.filter(isMailFile), ta=$("#modal #riText")||$("#modal #ahText"); if(mf.length&&ta){ e.preventDefault(); readMailFiles(mf).then(r=>{ if(!r.text) return; ta.value=(ta.value.trim()?ta.value.trim()+"\n\n":"")+r.text; if(ta.id==="riText") riRead(false); else readText(); }); return; } }
+  if(AH){ addImgs(f.filter(x=>x.type.startsWith("image/"))); return; } if(f.every(x=>x.type.startsWith("image/"))){ openAdhoc(); setTimeout(()=>addImgs(f),0); return; } handleFiles(f);});
 drop.onclick=()=>$("#filePlan").click();
 
 function auditList(){ const L=[]; for(const d of Object.values(M.audit)) for(const [id,x] of Object.entries(d.e||{})) L.push({id,...x}); return L.sort((a,b)=>(b.at||"")<(a.at||"")?-1:1); }
@@ -4547,7 +4603,8 @@ function openRetImport(){
       <div id="riThumbs" style="display:flex;gap:8px;flex-wrap:wrap"></div>
       <div class="row"><button class="btn primary" id="riRead" disabled>讀取截圖</button><span id="riStatus" style="font-size:12.5px;color:var(--ink-2)"></span></div>`:""}
     ${AI?`<div style="display:flex;flex-direction:column;gap:8px"><label for="riText" style="font-size:13px;color:var(--ink-2)">${aiOK?"或":""}貼上退工的文字（信件、交接表、Excel 選取複製都可以）${AI.local?"。網站版用固定格式解析：Outlook 開信後 <b>Ctrl+A</b>、<b>Ctrl+C</b> 貼上即可，可一次貼好幾封":""}：</label>
-      <textarea id="riText" ${inp} style="min-height:90px" placeholder="例：1080519 B-58502 9/29 缺料，料 10/2 到"></textarea>
+      <textarea id="riText" ${inp} style="min-height:90px" placeholder="貼上信件文字，或把 Outlook 另存的信件檔（.txt／.msg／.eml）拖到這裡"></textarea>
+      <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="riMailF">選擇信件檔</button><span style="font-size:12px;color:var(--ink-3)">傳統版 Outlook：選取多封信 → 檔案 → 另存新檔 → 存成「純文字」，一個檔就包含全部，可一次匯入。</span></div>
       <div class="row"><button class="btn primary" id="riReadText">讀取文字</button><span id="riStatus2" style="font-size:12.5px;color:var(--ink-2)"></span></div></div>`
     :`<div class="banner" style="margin:0"><span>需要從 claude.ai 開啟此頁，才能自動讀取截圖或文字。也可以把退工截圖傳給 Claude 對話，由 Claude 代為登錄。</span></div>`}
     ${AI&&!aiOK&&!AI.local?`<p style="font-size:12.5px;color:var(--ink-3);margin:0">這個檢視畫面不支援讀取圖片；截圖可以直接傳給 Claude 對話，由 Claude 代為登錄。</p>`:""}
@@ -4563,6 +4620,7 @@ function openRetImport(){
     dz.addEventListener("dragover",e=>e.preventDefault()); dz.addEventListener("drop",e=>{ e.preventDefault(); riImgs([...e.dataTransfer.files]); });
     d.querySelector("#riRead").onclick=()=>riRead(true); }
   const rt=d.querySelector("#riReadText"); if(rt) rt.onclick=()=>riRead(false);
+  { const ta=d.querySelector("#riText"); if(ta){ const pick=mailDrop(ta,()=>riRead(false),d.querySelector("#riStatus2")); const b=d.querySelector("#riMailF"); if(b) b.onclick=pick; } }
   { const ta=d.querySelector("#riText"); if(ta&&AI&&AI.local){ if(!aiOK) ta.focus(); ta.addEventListener("paste",()=>setTimeout(()=>riRead(false),50)); } }   // 網站版：貼上信件就自動讀取
   d.querySelector("#riAdd").onclick=()=>{ riSync(); RI.rows.push({}); riDraw(); };
   d.querySelector("[data-n]").onclick=()=>{ if(RI&&RI.ctl) RI.ctl.abort(); RI=null; closeDlg(); };
@@ -4645,7 +4703,8 @@ function openAdhoc(prefill){
     :""}
     ${AI?`<div style="display:flex;flex-direction:column;gap:8px">
       <label for="ahText" style="font-size:13px;color:var(--ink-2)">${aiOK?"或":""}在 Outlook 選取信件後按 <b>轉寄</b>，在轉寄畫面按 <b>Ctrl+A</b>、<b>Ctrl+C</b>，貼到這裡（會一起帶出寄件者、寄件日期、主旨與表格；貼完關掉轉寄視窗即可，不用送出）：</label>
-      <textarea id="ahText" style="min-height:110px;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:8px 10px;font-size:13px;font-family:var(--sans)" placeholder="貼上信件內容，可以一次貼好幾封"></textarea>
+      <textarea id="ahText" style="min-height:110px;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:8px 10px;font-size:13px;font-family:var(--sans)" placeholder="貼上信件內容，可以一次貼好幾封；也可以把 Outlook 另存的信件檔（.txt／.msg／.eml）拖到這裡"></textarea>
+      <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="ahMailF">選擇信件檔</button><span style="font-size:12px;color:var(--ink-3)">傳統版 Outlook：選取多封信 → 檔案 → 另存新檔 → 存成「純文字」，一次匯入。</span></div>
       <div class="row"><button class="btn primary" id="ahReadText">讀取信件內容</button><span id="ahStatus2" style="font-size:12.5px;color:var(--ink-2)"></span></div></div>`
     :`<div class="banner" style="margin:0"><span>需要從 claude.ai 開啟此頁，才能自動讀取信件。也可以把信件截圖傳給 Claude 對話，由 Claude 代為加入。</span></div>`}
     <div class="ah-file"><div class="row" style="flex-wrap:wrap;gap:8px"><b style="font-size:13px">從 Excel 檔帶入</b><button class="btn" id="ahFileBtn">選擇 Excel 檔</button><label style="font-size:13px">到期日 <input type="date" id="ahFileDue" style="border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:4px 8px"></label><label style="font-size:13px">類別 <input id="ahFileType" placeholder="例：IFE" style="width:90px;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:4px 8px"></label><span id="ahFileSt" style="font-size:12.5px;color:var(--ink-2)"></span></div>
@@ -4665,6 +4724,7 @@ function openAdhoc(prefill){
   file.onchange=()=>{ addImgs([...file.files]); file.value=""; };
   if(aiOK){ const dz=d.querySelector("#ahDrop"); dz.onclick=()=>file.click(); dz.focus(); d.querySelector("#ahRead").onclick=readShots; d.querySelector("#ahStop").onclick=()=>AH.ctl&&AH.ctl.abort(); }
   const rt=d.querySelector("#ahReadText"); if(rt) rt.onclick=readText;
+  { const ta=d.querySelector("#ahText"); if(ta){ const pick=mailDrop(ta,()=>readText(),d.querySelector("#ahStatus2")); const b=d.querySelector("#ahMailF"); if(b) b.onclick=pick; } }
   { const xf=document.createElement("input"); xf.type="file"; xf.accept=".xlsx,.xls,.xlsm,.csv"; xf.hidden=true; d.appendChild(xf);
     d.querySelector("#ahFileBtn").onclick=()=>xf.click(); xf.onchange=async()=>{ const f=xf.files[0]; xf.value=""; if(f) await adhocFromFile(f); };
     d.querySelector("#ahFileDue").onchange=e=>{ syncRows(); const v=e.target.value; AH.rows.forEach(r=>{ if(r.fromFile&&!r.dueInFile) r.due=v; }); drawRows(); };
