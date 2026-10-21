@@ -2085,9 +2085,9 @@ function capItems(note){ const out=[]; let toolHdr=false;
     if(/^TOOL\s*[:：]?$/i.test(l)){ toolHdr=true; continue; }
     if(!/P\/N|TOOL|已常備|已備|有備/i.test(l)) continue;
     const tool=toolHdr||/TOOL|工具|油槍|溫度槍|LAPTOP|PMAT/i.test(l), stocked=/已常備|已備|(RMQ|KHH)有備?|（已常備）|\(已常備\)/.test(l)&&!/需評估|待運補/.test(l), opt=/OPTIONAL|\(AR\)|可不用|替代/i.test(l);
-    const q=l.match(/[*＊]\s*(\d+)\s*EA|\s(\d+)\s*EA\b/i);
+    const q=l.match(/[*＊]\s*(\d+)\s*(?:EA)?|\s(\d+)\s*EA\b/i);
     let name=l.replace(/（已常備）|\(已常備\)|已常備|已備|(RMQ|KHH)有備?-?/g," ").replace(/\((OPTIONAL|AR)\)|（[^）]*可不用[^）]*）|\([^)]*可不用[^)]*\)/ig," ")
-      .replace(/^[\s\-：:]*(需備?\s*)?(SVC\s*)?(TOOL)?\s*(P\/N)?\s*[:：]?/i,"").replace(/^\s*P\/N\s*[:：]?/i,"").replace(/[*＊]\s*\d+\s*EA.*$/i,"").replace(/\s+\d+\s*EA\b.*$/i,"").replace(/P\/N\s*[:：]?/ig," ").replace(/[（(][^）)]*替代[^）)]*[）)]?/g,"").replace(/\s+/g," ").trim();
+      .replace(/^[\s\-：:]*(需備?\s*)?(SVC\s*)?(TOOL)?\s*(P\/N)?\s*[:：]?/i,"").replace(/^\s*P\/N\s*[:：]?/i,"").replace(/[*＊]\s*\d+\s*(EA)?.*$/i,"").replace(/\s+\d+\s*EA\b.*$/i,"").replace(/P\/N\s*[:：]?/ig," ").replace(/[（(][^）)]*替代[^）)]*[）)]?/g,"").replace(/[（(]\s*[）)]/g,"").replace(/\s+/g," ").trim();
     if(name.length<2) continue;
     out.push({name,qty:q?+(q[1]||q[2]):null,tool,stocked,opt}); }
   return out; }
@@ -2133,7 +2133,7 @@ function capNeed(w,st){ const c=capOf(w,st); const S=((M.stncap||{})[st])||null;
   return {st,c,status:c.st||"",need:items.filter(it=>!it.stocked&&!it.opt),opt:items.filter(it=>!it.stocked&&it.opt),stocked:items.filter(it=>it.stocked),low,qc:!!c.qc,mat:c.mat||"",tool:c.tool||"",explicit}; }
 const capIt=it=>`${it.tool?"🔧 ":""}${it.name}${it.qty?" ×"+it.qty:""}`;
 function capSummary(x){ if(!x) return ""; if(x.miss) return `${x.st} 清單未列（尚未詢問）`;
-  return [x.status==="no"?`${x.st} 清單：不建議`:x.status==="cond"?`${x.st} 清單：有條件`:"",x.need.length?`需帶 ${x.need.map(capIt).join("、")}`:x.mat==="need"||x.tool==="need"?"需備料／工具（清單備註未列件號）":"",x.qc?"需通知 QC":"",x.low.length?`常備量不足：${x.low.map(i=>i.stockName+"（剩 "+i.stock.qty+"／一架 "+i.stock.per+"）").join("、")}`:""].filter(Boolean).join("；"); }
+  return [x.status==="no"?`${x.st} 清單：不建議`:x.status==="cond"?`${x.st} 清單：有條件`:"",x.need.length?`需帶 ${x.need.map(capIt).join("、")}`:x.mat==="need"||x.tool==="need"?`需備${x.tool==="need"?"工具":"料"}：${(x.c&&x.c.note||"清單未列件號").replace(/\s*\n\s*/g," / ").slice(0,80)}`:"",x.qc?"需通知 QC":"",x.low.length?`常備量不足：${x.low.map(i=>i.stockName+"（剩 "+i.stock.qty+"／一架 "+i.stock.per+"）").join("、")}`:""].filter(Boolean).join("；"); }
 function capTag(w){ if(!w||w.st==="done"||w.removed||!M.stncap) return ""; const sc=((M.sched[shardOf(w.wo)]||{}).e||{})[w.wo]||{}; const out=[];
   for(const st of ["RMQ","KHH"]){ if(!(M.stncap||{})[st]||!stationOK(w,st,sc.n)) continue; const x=capNeed(w,st); if(!x) continue;
     const hot=x.miss||x.status==="no"||x.need.length||x.qc||x.low.length||x.mat==="need"||x.tool==="need"; if(!hot) continue;
