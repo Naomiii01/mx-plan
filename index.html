@@ -4025,7 +4025,7 @@ function histDlg(wo){
   const sc=((M.sched[shardOf(wo)]||{}).e||{})[wo];
   const imp=[]; if(w.pid&&M.plans[w.pid]) imp.push({at:M.plans[w.pid].at,by:M.plans[w.pid].by,act:"匯入月計畫",to:M.plans[w.pid].file});
   if(w.missingAt) imp.push({at:w.missingAt,act:"檔案中消失",to:w.missingFile||""});
-  recList("returns").filter(x=>x.wo===wo).forEach(x=>imp.push({at:x.at,by:x.by,act:"退工",to:`${x.reason}${x.note?"："+x.note:""}（${x.prevSched?"原排 "+fmtD(x.prevSched):"原未排定"}${recCard(x)?"，"+recCard(x):""}）`}));
+  recList("returns").filter(x=>x.wo===wo).forEach(x=>imp.push({at:x.hist&&x.date?new Date(x.date+"T12:00:00").toISOString():x.at,by:x.by,act:x.hist?"退工（補登）":"退工",to:`${fmtD(x.date).slice(5)} 退工：${x.reason}${x.note?"："+x.note:""}（${x.prevSched?"原排 "+fmtD(x.prevSched):"原未排定"}${recCard(x)?"，"+recCard(x):""}）`}));
   recList("changes").filter(x=>x.wo===wo&&x.kind==="fix").forEach(x=>imp.push({at:x.at,by:x.by,act:"改工單",to:`${x.reason}${x.note?"："+x.note:""}${x.actH?`（${x.stdH?`工時 ${x.stdH}→`:"實際需 "}${x.actH}）`:""}，${OUTL[x.outcome]||""}，目前：${FIXST[x.status||"todo"]}`}));
   if(w.removed&&w.rmAt) imp.push({at:w.rmAt,by:w.rmBy,act:"已移除",to:w.rmReason||""});
   const dn=derive().doneMap[wo]; if(dn) imp.push({at:dn.at,act:"完工比對",to:(dn.date?fmtD(dn.date)+" 完工 · ":"")+(dn.file||"")});
