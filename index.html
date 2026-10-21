@@ -1570,9 +1570,9 @@ function derive(){
     else if(w.projHmv&&!sc.d) st="hmv";
     // a later-cycle WO of a short chain that has its own date: its package DUE DATE is the old cycle's (stale) — judge it by its date, or by a hand-set DUE
     else if(w.shortQueue&&hmvOn[w.tail]) st="hmv";
-    else if(w.shortQueue) st=sc.du&&!dn&&sc.du<today?"over":sc.wm?"wait":sc.d<today?"past":"sched";
+    else if(w.shortQueue) st=sc.wm&&!sc.d?"wait":sc.du&&!dn&&sc.du<today?"over":sc.wm?"wait":sc.d<today?"past":"sched";
+    else if(sc.wm&&!sc.d) st="wait";  // 待料（修管通知缺料／工具）：即使已過到期日也列在待料，料到再排；逾期天數仍顯示
     else if(sh?(hardD&&hardD<today):(effDue&&effDue<today)) st="over";
-    else if(sc.wm&&!sc.d) st="wait";  // 待料: material not in yet — not 排定已過, not nagged as 待安排
     else if(sc.d && sc.d<today) st="past";
     else if(!sc.d&&(sh?((planD&&dueBy!=="manual"&&daysBetween(today,planD)<=2)||(hardD&&daysBetween(today,hardD)<=sh.warn)):(effDue&&daysBetween(today,effDue)<=M.config.soonDays))) st="soon";
     else st=sc.d?"sched":"todo";
@@ -3158,7 +3158,7 @@ function renderNow(){
   $("#asof").textContent=`今天 ${fmtD(todayISO())} · 快屆期＝${M.config.soonDays} 天內`+(ld?` · 完工資料截至 ${fmtD(localDay(ld))} 匯入`:"");
   renderBanners(); renderImp();
   const sc=all.filter(w=>(!ui.type||w.type===ui.type)&&(!ui.month||w.month===ui.month)&&(!ui.pkg||w.pkgType===ui.pkg)&&(!ui.tail||w.tail===ui.tail));
-  const cnt={}; for(const k in ST) cnt[k]=0; sc.forEach(w=>cnt[w.vs||w.st]++);
+  const cnt={}; for(const k in ST) cnt[k]=0; sc.forEach(w=>cnt[w.vs||w.st]++); cnt.waitOver=sc.filter(w=>(w.vs||w.st)==="wait"&&w.left!=null&&w.left<0).length;
   const notes={wait:"缺料延期，料到再安排",nowo:"尚未發工、也還沒排日期",past:"排定日已過，未回報完工",over:"未完工，已過到期日",soon:"未排定，即將到期",miss:"新檔已無此工單",todo:"尚未排定日期",sched:"已排入，等待完工",done:"已由完工檔比對"};
   notes.hmv="交基修執行，RELEASED 後重算"; notes.sched="已排入（含短天期自動預排），等待完工";
   { // 狀態總覽: 一條完成進度條（各狀態比例，可點）＋需注意的狀態卡＋進度小標籤
@@ -3168,7 +3168,7 @@ function renderNow(){
     $("#strip").innerHTML=`<div class="st-top"><div class="st-prog"><b>完成 ${cnt.done}</b> / ${tot} 張（${pct}%）<span class="muted">· 已排定 ${cnt.sched} · 待安排 ${cnt.todo}</span></div>
       <div class="st-bar">${segK.map(k=>`<button class="st-seg ${ST[k].c} ${ui.status===k?"on":""}" data-st="${k}" style="flex:${cnt[k]}" title="${esc(ST[k].t)} ${cnt[k]} 張（${Math.round(cnt[k]/tot*100)}%）"></button>`).join("")}</div>
       <div class="st-pills">${prog.map(k=>`<button class="chk-p ${ST[k].c} ${ui.status===k?"on":""}" data-st="${k}" title="${esc(notes[k]||"")}"><span>${ST[k].t}</span><b>${cnt[k]}</b></button>`).join("")}</div></div>
-      <div class="st-att">${att.map(k=>`<button class="stat ${ST[k].c} ${ui.status===k?"on":""} ${cnt[k]?"":"zero"}" data-st="${k}"><span class="lbl">${ST[k].t}</span><span class="num">${cnt[k]}</span><span class="note">${notes[k]}</span></button>`).join("")}</div>`; }
+      <div class="st-att">${att.map(k=>`<button class="stat ${ST[k].c} ${ui.status===k?"on":""} ${cnt[k]?"":"zero"}" data-st="${k}"><span class="lbl">${ST[k].t}</span><span class="num">${cnt[k]}</span><span class="note">${notes[k]}${k==="wait"&&cnt.waitOver?`<br><b style="color:var(--red)">其中 ${cnt.waitOver} 張已過到期日</b>`:""}</span></button>`).join("")}</div>`; }
   { // 遺漏檢查: 需處理的才用大卡片；追蹤／參考的收成一列小標籤；0 張的不顯示（可展開）
     const CK=checksOf(sc).map(c=>({...c,n:c.list?c.list.length:c.n}));
     const G=[["act","需處理",["past","pzDue","urgentTodo","flNo","flNone","stn","retPending","adhocTodo","late","miss","nowo"]],["trk","追蹤中",["shortNeed","pzAll","retWait","retTrack","missSched","fixOpen","carry","nodue","hmvWo","shortMiss"]],["ref","參考／抽查",["manual","cardDone","extra"]]];
