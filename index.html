@@ -2202,12 +2202,15 @@ function renderDsp(){
 }
 function capDlg(st){
   const S=(M.stncap||{})[st]; let f="", fs="";
-  const d=openDlg(`<h3>${esc(st)} 可執行清單</h3>${S?`<p class="muted" style="font-size:12.5px">${esc(S.file||"")}　${esc(fmtT(S.at))}　共 ${Object.keys(S.cards||{}).length} 張工卡${Object.keys(S.stock||{}).length?`、常備物料 ${Object.keys(S.stock).length} 項`:""}。要更新，把新的 Excel 拖到主畫面即可（依「${esc(st)} CFM」欄辨識）。</p>`:`<p>還沒有匯入 ${esc(st)} 的清單。把含「Task No」「${esc(st)} CFM」欄的 Excel 拖到主畫面即可匯入。</p>`}
+  const d=openDlg(`<h3>${esc(st)} 可執行清單</h3>${S?`<p class="muted" style="font-size:12.5px">${esc(S.file||"")}　${esc(fmtT(S.at))}　共 ${Object.keys(S.cards||{}).length} 張工卡${Object.keys(S.stock||{}).length?`、常備物料 ${Object.keys(S.stock).length} 項`:""}。清單只補充「能不能在外站做、需要什麼」，不會新增或更動工單。</p>`:`<p>還沒有匯入 ${esc(st)} 的清單。按下方「匯入清單」選含「Task No」「${esc(st)} CFM」欄的 Excel。清單只補充「能不能在外站做、需要什麼」，不會新增或更動工單。</p>`}
     ${S?`<div class="row" style="gap:8px;flex-wrap:wrap"><input id="capQ" placeholder="搜尋工卡、件號、備註" style="flex:1;min-width:160px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2)"><span class="seg">${[["","全部"],["ok","可執行"],["cond","有條件"],["no","不建議"],["need","需帶料件／工具"]].map(([k,l])=>`<button class="chip ${k===""?"on":""}" data-cf="${k}">${l}</button>`).join("")}</span></div>
     <div id="capT" style="max-height:52vh;overflow:auto;margin-top:8px"></div>
     ${Object.keys(S.stock||{}).length?`<details style="margin-top:8px"><summary><b>常備物料量</b></summary><table class="cap-t"><tr><th>物料</th><th>一架機用量</th><th>目前備料數</th><th>預計調整數</th><th>通知日期</th></tr>${Object.entries(S.stock).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="mono">${v.per??""}</td><td class="mono ${v.qty!=null&&v.per!=null&&v.qty<v.per?"cap-no":""}">${v.qty??""}</td><td class="mono">${v.adj??""}</td><td class="mono">${esc(fmtD(v.date||""))}</td></tr>`).join("")}</table></details>`:""}`:""}
-    <div class="foot"><button class="btn primary" data-x>關閉</button></div>`);
-  d.style.maxWidth="1100px"; d.querySelector("[data-x]").onclick=closeDlg; if(!S) return;
+    <div class="foot"><button class="btn" id="capImp">${S?"更新清單":"匯入清單"}（RMQ／KHH）</button><button class="btn primary" data-x>關閉</button></div>`);
+  d.style.maxWidth="1100px"; d.querySelector("[data-x]").onclick=closeDlg;
+  { const fi=document.createElement("input"); fi.type="file"; fi.accept=".xlsx,.xls,.xlsm"; fi.multiple=true; fi.hidden=true; d.appendChild(fi);
+    d.querySelector("#capImp").onclick=()=>fi.click(); fi.onchange=async()=>{ const fs=[...fi.files]; fi.value=""; if(!fs.length) return; closeDlg(); await handleFiles(fs); if(ui.view==="dsp") renderDsp(); }; }
+  if(!S) return;
   const draw=()=>{ const Q=f.trim().toUpperCase(); const L=Object.entries(S.cards).filter(([k,c])=>(!fs||(fs==="need"?(c.items||[]).some(i=>!i.stocked&&!i.opt)||c.mat==="need"||c.tool==="need":(c.st||"")===fs))&&(!Q||(k+" "+(c.desc||"")+" "+(c.note||"")+" "+(c.extra||"")).toUpperCase().includes(Q)));
     d.querySelector("#capT").innerHTML=`<table class="cap-t"><tr><th>工卡</th><th>工作</th><th>狀態</th><th>需帶</th><th>已常備</th><th>QC</th><th>備註</th></tr>${L.map(([k,c])=>{ const it=c.items||[];
       return `<tr><td class="mono">${esc(k)}</td><td>${esc((c.desc||"").slice(0,50))}<br><span class="muted">${esc(c.iv||"")}${c.mh?" · "+esc(c.mh)+" MH":""}</span></td><td class="cap-${c.st||"ok"}">${esc(CAP_L[c.st||""])}</td>
