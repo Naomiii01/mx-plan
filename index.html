@@ -2106,7 +2106,8 @@ function importCap(wb,fileName){
         for(const k of Object.keys(e)) if(e[k]===""||e[k]===false||(Array.isArray(e[k])&&!e[k].length)) delete e[k];
         if(cards[card]){ if(e.note&&cards[card].note!==e.note){ cards[card].note=[cards[card].note,e.note].filter(Boolean).join("\n"); cards[card].items=capItems(cards[card].note); } continue; }
         cards[card]=e; n++; } }
-    else { // 常備物料量表
+    else { // 常備物料量表（工作表名稱寫的是另一站，例如 KHH 檔裡的「RMQ備料量」，就不算這站的）
+      if(/RMQ|KHH/i.test(sn)&&!new RegExp(st,"i").test(sn)) continue;
       let h2=-1; for(let i=0;i<Math.min(rows.length,8);i++) if((rows[i]||[]).map(normH).includes("儲放物料")){ h2=i; break; } if(h2<0) continue;
       const H=(rows[h2]||[]).map(normH), ix=re=>H.findIndex(h=>re.test(h)), cN=ix(/^儲放物料$/), cU=ix(/^一架機用量$/), cQ=ix(/^目前備料數/), cA=ix(/^預計調整數/), cD=ix(/^通知日期$/);
       for(let i=h2+1;i<rows.length;i++){ const r=rows[i]; if(!r||!r[cN]) continue; const nm=String(r[cN]).trim(); const num=v=>v==null||v===""?null:+v;
