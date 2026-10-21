@@ -2125,20 +2125,25 @@ const capStockSet=st=>{ const S=(M.stncap||{})[st]; if(!S) return new Set(); if(
 // 一張工單在某外站：清單狀態、需帶項目（非常備、非選用）、是否需通知 QC、是否在清單中
 function capNeed(w,st){ const c=capOf(w,st); const S=((M.stncap||{})[st])||null; if(!S) return null;
   const sc=((M.sched[shardOf(w.wo)]||{}).e||{})[w.wo]||{}; const explicit=new RegExp(st+"(可執行|可做|OK)").test([sc.n,w.remark].join(" ").toUpperCase().replace(/\s+/g,""));
-  if(!c) return explicit?{st,miss:true,need:[],opt:[],stocked:[],low:[],qc:false,explicit}:null;
+  if(!c) return explicit?{st,miss:true,need:[],opt:[],stocked:[],low:[],invLow:[],qc:false,explicit}:null;
   const stockK=Object.keys(S.stock||{}).map(k=>[capKey({name:k}),k]);
   const low=(c.items||[]).filter(it=>it.stocked).map(it=>{ const m=stockK.find(([k])=>k&&(capKey(it).includes(k)||k.includes(capKey(it)))); const v=m&&S.stock[m[1]]; return v&&v.qty!=null&&v.per!=null&&v.qty<v.per?{...it,stock:v,stockName:m[1]}:null; }).filter(Boolean);
   const SK=capStockSet(st), has=it=>it.stocked||SK.has(capKey(it))||(!it.tool&&c.mat==="stocked");
-  const items=(c.items||[]).map(it=>has(it)&&!it.stocked?{...it,stocked:true,via:"站上已有"}:it);
-  return {st,c,status:c.st||"",need:items.filter(it=>!it.stocked&&!it.opt),opt:items.filter(it=>!it.stocked&&it.opt),stocked:items.filter(it=>it.stocked),low,qc:!!c.qc,mat:c.mat||"",tool:c.tool||"",explicit}; }
-const capIt=it=>`${it.tool?"🔧 ":""}${it.name}${it.qty?" ×"+it.qty:""}`;
+  const invLow=[];
+  const items=(c.items||[]).map(it=>{ const v=invFind(st,it);
+    if(it.stocked){ if(v&&v.why.length) invLow.push({...it,inv:v,invWhy:v.why.join("、")}); return v?{...it,inv:v}:it; }
+    if(has(it)) return {...it,stocked:true,via:"站上已有"};
+    if(v&&v.avail&&!v.why.length) return {...it,stocked:true,via:`${st} 庫存（${invWhere(v)}）`,inv:v};
+    return v?{...it,inv:v,invWhy:v.why.join("、")}:it; });
+  return {st,c,status:c.st||"",need:items.filter(it=>!it.stocked&&!it.opt),opt:items.filter(it=>!it.stocked&&it.opt),stocked:items.filter(it=>it.stocked),low,invLow,qc:!!c.qc,mat:c.mat||"",tool:c.tool||"",explicit}; }
+const capIt=it=>`${it.tool?"🔧 ":""}${it.name}${it.qty?" ×"+it.qty:""}${it.invWhy?"（站上庫存："+it.invWhy+"）":""}`;
 function capSummary(x){ if(!x) return ""; if(x.miss) return `${x.st} 清單未列（尚未詢問）`;
-  return [x.status==="no"?`${x.st} 清單：不建議`:x.status==="cond"?`${x.st} 清單：有條件`:"",x.need.length?`需帶 ${x.need.map(capIt).join("、")}`:x.mat==="need"||x.tool==="need"?`需備${x.tool==="need"?"工具":"料"}：${(x.c&&x.c.note||"清單未列件號").replace(/\s*\n\s*/g," / ").slice(0,80)}`:"",x.qc?"需通知 QC":"",x.low.length?`常備量不足：${x.low.map(i=>i.stockName+"（剩 "+i.stock.qty+"／一架 "+i.stock.per+"）").join("、")}`:""].filter(Boolean).join("；"); }
+  return [x.status==="no"?`${x.st} 清單：不建議`:x.status==="cond"?`${x.st} 清單：有條件`:"",x.need.length?`需帶 ${x.need.map(capIt).join("、")}`:x.mat==="need"||x.tool==="need"?`需備${x.tool==="need"?"工具":"料"}：${(x.c&&x.c.note||"清單未列件號").replace(/\s*\n\s*/g," / ").slice(0,80)}`:"",x.qc?"需通知 QC":"",x.low.length?`常備量不足：${x.low.map(i=>i.stockName+"（剩 "+i.stock.qty+"／一架 "+i.stock.per+"）").join("、")}`:"",(x.invLow||[]).length?`清單寫已常備，但庫存：${x.invLow.map(i=>i.name+"（"+i.invWhy+"）").join("、")}`:""].filter(Boolean).join("；"); }
 function capTag(w){ if(!w||w.st==="done"||w.removed||!M.stncap) return ""; const sc=((M.sched[shardOf(w.wo)]||{}).e||{})[w.wo]||{}; const out=[];
   for(const st of ["RMQ","KHH"]){ if(!(M.stncap||{})[st]||!stationOK(w,st,sc.n)) continue; const x=capNeed(w,st); if(!x) continue;
-    const hot=x.miss||x.status==="no"||x.need.length||x.qc||x.low.length||x.mat==="need"||x.tool==="need"; if(!hot) continue;
-    const lab=x.miss?`${st} 未詢問`:x.status==="no"?`${st} 不建議`:x.need.length?`${st} 需帶 ${x.need.length} 項`:x.low.length?`${st} 常備不足`:x.qc?`${st} 需QC`:`${st} 需備料`;
-    out.push(`<span class="mini ${x.status==="no"||x.low.length?"warn":"cap"}" title="${esc(capSummary(x)+(x.c&&x.c.note?"\n\n清單備註：\n"+x.c.note:""))}">${esc(lab)}</span>`); }
+    const hot=x.miss||x.status==="no"||x.need.length||x.qc||x.low.length||x.invLow.length||x.mat==="need"||x.tool==="need"; if(!hot) continue;
+    const lab=x.miss?`${st} 未詢問`:x.status==="no"?`${st} 不建議`:x.need.length?`${st} 需帶 ${x.need.length} 項`:x.low.length||x.invLow.length?`${st} 常備不足`:x.qc?`${st} 需QC`:`${st} 需備料`;
+    out.push(`<span class="mini ${x.status==="no"||x.low.length||x.invLow.length?"warn":"cap"}" title="${esc(capSummary(x)+(x.c&&x.c.note?"\n\n清單備註：\n"+x.c.note:""))}">${esc(lab)}</span>`); }
   return out.join(""); }
 function dspCheck(t,D,N,st){
   const last=addDays(D,N-1), R=addDays(D,N), T=todayISO();
@@ -2157,7 +2162,7 @@ function dspCheck(t,D,N,st){
     if((w.short||w.shortQueue)&&/^(A321|A330)$/.test(w.type)) continue;
     const sc=((M.sched[shardOf(w.wo)]||{}).e||{})[w.wo]||{};
     if(stationOK(w,S,sc.n)){ const due=w.short?(w.hardD||w.planD||""):(w.effDue||w.due||""), sd=w.sched||"";   // 外站要做的工單：清單比對需帶什麼
-      if((sd&&sd>=D&&sd<=last)||(!sd&&due&&due<=last)||(w.short&&due&&due<=last)){ const x=capNeed(w,S); if(x&&(x.miss||x.status==="no"||x.need.length||x.qc||x.low.length||x.mat==="need"||x.tool==="need")) out.cap.push({w,x,due,sd}); }
+      if((sd&&sd>=D&&sd<=last)||(!sd&&due&&due<=last)||(w.short&&due&&due<=last)){ const x=capNeed(w,S); if(x&&(x.miss||x.status==="no"||x.need.length||x.qc||x.low.length||x.invLow.length||x.mat==="need"||x.tool==="need")) out.cap.push({w,x,due,sd}); }
       continue; }
     const due=w.short?(w.hardD||""):(w.effDue||w.due||""); const sd=w.sched||"";
     if(sd&&sd>=D&&sd<=last) out.move.push({w,d:sd,due});
@@ -2185,7 +2190,7 @@ function renderDsp(){
       <label>在外 <input type="number" id="dspDays" min="1" max="60" value="${N}" style="width:60px"> 天，回 TPE 約 <b class="mono">${esc(fmtD(R).slice(5))}</b></label>
       <span class="seg">${["RMQ","KHH"].map(s=>`<button class="chip ${st===s?"on":""}" data-dsps="${s}">${s}</button>`).join("")}</span>
       <span class="seg">${types.map(x=>`<button class="chip ${ty===x?"on":""}" data-dspt="${esc(x)}">${esc(x)}</button>`).join("")}</span>
-      <button class="btn sm" id="capView">${esc(st)} 可執行清單${(M.stncap||{})[st]?"":"（未匯入）"}</button>${res.some(r=>r.cap.length)?`<button class="btn sm" id="capExp">匯出 ${esc(st)} 備料清單</button>`:""}
+      <button class="btn sm" id="capView">${esc(st)} 可執行清單${(M.stncap||{})[st]?"":"（未匯入）"}</button><button class="btn sm" id="invView">${esc(st)} 站上庫存${invDoc(st)?"":"（未匯入）"}</button>${res.some(r=>r.cap.length)?`<button class="btn sm" id="capExp">匯出 ${esc(st)} 備料清單</button>`:""}
     </div>
     <div class="d-kpi dsp-kpi">${["ok","prep","no"].map(k=>`<div class="stat ${VT[k][1]}"><span class="lbl">${VT[k][0]}</span><span class="num">${cnt(k)}</span><span class="note">${k==="ok"?"在外期間沒有限 TPE 工單到期":k==="prep"?"有工單需先做或改期":"HMV／A CHK／停場衝突"}</span></div>`).join("")}</div>
     <div class="dsp-list">${res.map(r=>{ const v=VT[r.verdict];
@@ -2198,7 +2203,7 @@ function renderDsp(){
   el.querySelectorAll("[data-dspn]").forEach(b=>b.onclick=()=>{ ui.dspDays=+b.dataset.dspn; renderDsp(); });
   el.querySelectorAll("[data-dsps]").forEach(b=>b.onclick=()=>{ ui.dspSt=b.dataset.dsps; renderDsp(); });
   el.querySelectorAll("[data-dspt]").forEach(b=>b.onclick=()=>{ ui.dspType=b.dataset.dspt; renderDsp(); });
-  { const b=$("#capView"); if(b) b.onclick=()=>capDlg(st); const x=$("#capExp"); if(x) x.onclick=()=>capExport(st,D,N,res); }
+  { const b=$("#capView"); if(b) b.onclick=()=>capDlg(st); const iv=$("#invView"); if(iv) iv.onclick=()=>invDlg(st); const x=$("#capExp"); if(x) x.onclick=()=>capExport(st,D,N,res); }
 }
 function capDlg(st){
   const S=(M.stncap||{})[st]; let f="", fs="";
@@ -2206,9 +2211,9 @@ function capDlg(st){
     ${S?`<div class="row" style="gap:8px;flex-wrap:wrap"><input id="capQ" placeholder="搜尋工卡、件號、備註" style="flex:1;min-width:160px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2)"><span class="seg">${[["","全部"],["ok","可執行"],["cond","有條件"],["no","不建議"],["need","需帶料件／工具"]].map(([k,l])=>`<button class="chip ${k===""?"on":""}" data-cf="${k}">${l}</button>`).join("")}</span></div>
     <div id="capT" style="max-height:52vh;overflow:auto;margin-top:8px"></div>
     ${Object.keys(S.stock||{}).length?`<details style="margin-top:8px"><summary><b>常備物料量</b></summary><table class="cap-t"><tr><th>物料</th><th>一架機用量</th><th>目前備料數</th><th>預計調整數</th><th>通知日期</th></tr>${Object.entries(S.stock).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="mono">${v.per??""}</td><td class="mono ${v.qty!=null&&v.per!=null&&v.qty<v.per?"cap-no":""}">${v.qty??""}</td><td class="mono">${v.adj??""}</td><td class="mono">${esc(fmtD(v.date||""))}</td></tr>`).join("")}</table></details>`:""}`:""}
-    <div class="foot"><button class="btn" id="capImp">${S?"更新清單":"匯入清單"}（RMQ／KHH）</button><button class="btn primary" data-x>關閉</button></div>`);
-  d.style.maxWidth="1100px"; d.querySelector("[data-x]").onclick=closeDlg;
-  { const fi=document.createElement("input"); fi.type="file"; fi.accept=".xlsx,.xls,.xlsm"; fi.multiple=true; fi.hidden=true; d.appendChild(fi);
+    <div class="foot"><button class="btn" id="capInv">${esc(st)} 站上庫存</button><button class="btn" id="capImp">${S?"更新清單":"匯入清單"}（RMQ／KHH）</button><button class="btn primary" data-x>關閉</button></div>`);
+  d.style.maxWidth="1100px"; d.querySelector("[data-x]").onclick=closeDlg; d.querySelector("#capInv").onclick=()=>invDlg(st);
+  { const fi=document.createElement("input"); fi.type="file"; fi.accept=".xlsx,.xls,.xlsm,.csv"; fi.multiple=true; fi.hidden=true; d.appendChild(fi);
     d.querySelector("#capImp").onclick=()=>fi.click(); fi.onchange=async()=>{ const fs=[...fi.files]; fi.value=""; if(!fs.length) return; closeDlg(); await handleFiles(fs); if(ui.view==="dsp") renderDsp(); }; }
   if(!S) return;
   const draw=()=>{ const Q=f.trim().toUpperCase(); const L=Object.entries(S.cards).filter(([k,c])=>(!fs||(fs==="need"?(c.items||[]).some(i=>!i.stocked&&!i.opt)||c.mat==="need"||c.tool==="need":(c.st||"")===fs))&&(!Q||(k+" "+(c.desc||"")+" "+(c.note||"")+" "+(c.extra||"")).toUpperCase().includes(Q)));
@@ -2222,8 +2227,8 @@ function capDlg(st){
 function capExport(st,D,N,res){ if(!window.XLSX){ toast("Excel 元件尚未載入"); return; }
   const H=["機號","WO","工卡","工作名稱","排定","到期","清單狀態","類型","需帶項目","數量","需通知 QC","常備不足","清單備註"]; const rows=[];
   for(const r of res) for(const p of r.cap){ const x=p.x, base=[r.t,p.w.wo,cardOf(p.w),(p.w.title||"").slice(0,60),fmtD(p.sd||""),fmtD(p.due||""),x.miss?"清單未列":CAP_L[x.status||""]];
-    const tail=[x.qc?"需通知":"",x.low.map(i=>i.stockName+" 剩 "+i.stock.qty).join("、"),x.c&&x.c.note||""];
-    if(x.need.length) x.need.forEach(i=>rows.push([...base,i.tool?"工具":"料件",i.name,i.qty||"",...tail])); else rows.push([...base,"","","",...tail]); }
+    const tail=[x.qc?"需通知":"",[...x.low.map(i=>i.stockName+" 剩 "+i.stock.qty),...(x.invLow||[]).map(i=>i.name+" "+i.invWhy)].join("、"),x.c&&x.c.note||""];
+    if(x.need.length) x.need.forEach(i=>rows.push([...base,i.tool?"工具":"料件",i.name+(i.invWhy?"（站上庫存："+i.invWhy+"）":""),i.qty||"",...tail])); else rows.push([...base,"","","",...tail]); }
   const ws=XLSX.utils.aoa_to_sheet([[`${st} 備料清單　派出 ${fmtD(D)}，在外 ${N} 天`],H,...rows]); ws["!cols"]=[9,10,22,40,10,10,9,6,34,5,9,24,50].map(w=>({wch:w}));
   for(let c=0;c<H.length;c++){ const r=XLSX.utils.encode_cell({r:1,c}); if(ws[r]) ws[r].s={font:{bold:true,color:{rgb:"FFFFFF"}},fill:{fgColor:{rgb:"8C7266"}}}; }
   // 合計：同一項目要帶幾份
@@ -2231,6 +2236,125 @@ function capExport(st,D,N,res){ if(!window.XLSX){ toast("Excel 元件尚未載�
   const ws2=XLSX.utils.aoa_to_sheet([["類型","項目","合計數量（未註明數量以 1 計）"],...Object.entries(sum).sort().map(([k,n])=>[...k.split("|"),n])]); ws2["!cols"]=[{wch:6},{wch:40},{wch:22}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"逐張工單"); XLSX.utils.book_append_sheet(wb,ws2,"合計");
   return saveWb(wb,`${st}備料清單_${D.replace(/-/g,"")}.xlsx`); }
+/* =====================================================================
+   外站庫存（RMQ／KHH 現有的工具、裝備、耗材、航材、化學品）
+   存在 stncap/INV_RMQ、stncap/INV_KHH；匯入時以「類別」為單位取代（只匯一張工作表就只更新那一類）
+   需帶項目比對：件號相同（或件號包含在需求文字中）→ 站上已有；數量 0、已過期、已回 TPE → 仍列需帶並註明原因
+   ===================================================================== */
+const INV_CATS=[["GRN LIST",/GRN\s*LIST/i],["工具箱清單",/工具箱/],["安全繩附件",/安全繩/],["修管的工具裝備",/修管/],["鴨腳板手組",/鴨腳/],["工具裝備",/工具裝備/],["PME",/PME/i],["GSE",/GSE/i],["一般耗材",/耗材/],["航材",/航材/],["化學品",/化學/]];
+const invCatOf=s=>{ for(const [c,re] of INV_CATS) if(re.test(String(s||""))) return c; return ""; };
+const MON3="JANFEBMARAPRMAYJUNJULAUGSEPOCTNOVDEC";
+function invDate(v){ if(v==null||v==="") return ""; if(v instanceof Date||typeof v==="number") return parseDate(v)||"";
+  const s=String(v).trim().toUpperCase(); let m=s.match(/^([A-Z]{3})[\/\-\s](\d{1,2})[\/\-\s,]+(\d{4})/); if(m&&MON3.indexOf(m[1])>=0&&MON3.indexOf(m[1])%3===0) return m[3]+"-"+String(MON3.indexOf(m[1])/3+1).padStart(2,"0")+"-"+m[2].padStart(2,"0");
+  m=s.match(/(\d{4})[\/\-]([A-Z]{3})[\/\-](\d{1,2})/); if(m&&MON3.indexOf(m[2])>=0&&MON3.indexOf(m[2])%3===0) return m[1]+"-"+String(MON3.indexOf(m[2])/3+1).padStart(2,"0")+"-"+m[3].padStart(2,"0");
+  return /^\d/.test(s)?(parseDate(s)||""):""; }
+function fillMerges(ws){ for(const r of (ws["!merges"]||[])){ const a=ws[XLSX.utils.encode_cell(r.s)]; if(!a) continue;
+  for(let R=r.s.r;R<=r.e.r;R++) for(let C=r.s.c;C<=r.e.c;C++){ if(R===r.s.r&&C===r.s.c) continue; const k=XLSX.utils.encode_cell({r:R,c:C}); if(!ws[k]) ws[k]={...a}; } }
+  if(ws["!ref"]&&(ws["!merges"]||[]).length){ const R=XLSX.utils.decode_range(ws["!ref"]); for(const m of ws["!merges"]){ R.e.r=Math.max(R.e.r,m.e.r); R.e.c=Math.max(R.e.c,m.e.c); } ws["!ref"]=XLSX.utils.encode_range(R); } }
+const IH={name:/^(DESCRIPTION|ITEM DESCRIPTION|品名|TOOL NAME)$/,pn:/^(P\/N|PN|件號)$/,item:/^ITEM$/,sn:/^(S\/N|SERIAL NUMBER|序號)$/,avail:/^AVAILABL/,qty:/^(QTY|QT|數量|GRN QTY|GRN QT)$/,orig:/^ORIGINAL$/,due:/(DUE DATE|EXP DATE)$/,loc:/^(LOCATION|LOC)$/,note:/^(REMARK|備註)$/,grn:/^GRN$/,cls:/^ITEM CLA/,lot:/^LOT$/,temp:/TEMPERATURE/,cnt:/^清點時間$/};
+function invHead(rows){ for(let i=0;i<Math.min(rows.length,8);i++){ const H=(rows[i]||[]).map(normH);
+  if(H.filter(h=>h==="TOOL NAME").length>=2) return {hi:i,box:true,H};
+  if(H.some(h=>IH.name.test(h))&&H.some(h=>IH.pn.test(h)||IH.item.test(h))) return {hi:i,H}; } return null; }
+const invTitle=rows=>rows.slice(0,2).map(r=>(r||[]).filter(v=>v!=null).join(" ")).join(" ");
+function isInvBook(wb){ return wb.SheetNames.some(sn=>{ const rows=sheetRows(wb.Sheets[sn]); const h=invHead(rows); if(!h) return false;
+  if(h.H.some(x=>/^(WO|TASK NO|W\/O)$/.test(x))) return false; return !!(invCatOf(sn)||invCatOf(invTitle(rows))||h.box||h.H.some(x=>IH.due.test(x)&&/EXP/.test(x))); }); }
+const invNum=v=>{ if(v==null||v==="") return null; if(typeof v==="number") return v; const m=String(v).match(/-?\d+(\.\d+)?/); return m?+m[0]:null; };
+function importInv(wb,fileName){ const items=[], cats={}; const T=todayISO();
+  for(const sn of wb.SheetNames){ const ws=wb.Sheets[sn]; fillMerges(ws); const rows=sheetRows(ws); const h=invHead(rows); if(!h) continue;
+    const title=invTitle(rows); let cat=invCatOf(sn)||invCatOf(title)||invCatOf(fileName)||(h.box?"工具箱清單":sn);
+    const dm=title.match(/清點日期\s*[:：]?\s*([A-Z]{3}\/\d{1,2}\/\d{4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/i); const cdate=dm?invDate(dm[1]):"";
+    const list=[];
+    if(h.box){ const H=h.H; const lab=rows[h.hi-1]||[];
+      for(let c=0;c<H.length;c++){ if(H[c]!=="TOOL NAME") continue; let box=""; for(let k=c;k>=0;k--) if(lab[k]!=null&&String(lab[k]).trim()){ box=String(lab[k]).replace(/\s+/g," ").trim(); break; }
+        const bm=box.match(/編號\s*[:：]\s*([A-Z0-9]+)/i);
+        for(let i=h.hi+1;i<rows.length;i++){ const r=rows[i]||[]; const nm=r[c]; if(nm==null||/^\(/.test(String(nm).trim())) continue;
+          list.push({name:String(nm).replace(/\s+/g," ").trim(),pn:r[c+2]!=null?String(r[c+2]).trim():"",qty:invNum(r[c+1]),box:bm?bm[1]:box,note:box}); } } }
+    else { const H=h.H, ix=re=>H.findIndex(x=>re.test(x)), all=re=>H.map((x,i)=>re.test(x)?i:-1).filter(i=>i>=0);
+      const C={name:ix(IH.name),pn:ix(IH.pn),item:ix(IH.item),sn:ix(IH.sn),q:[ix(IH.avail),ix(IH.qty),ix(IH.orig)].find(i=>i>=0)??-1,due:ix(IH.due),loc:ix(IH.loc),note:all(IH.note),grn:ix(IH.grn),cls:ix(IH.cls),lot:ix(IH.lot),temp:ix(IH.temp),cnt:ix(IH.cnt)};
+      if(C.pn<0) C.pn=C.item;
+      const s=(r,i)=>i>=0&&r[i]!=null?(r[i] instanceof Date?iso(r[i]):String(r[i])).replace(/\s*\n\s*/g," / ").trim():"";
+      let prev=null;
+      for(let i=h.hi+1;i<rows.length;i++){ const r=rows[i]||[]; let name=s(r,C.name), pn=s(r,C.pn);
+        if(!name&&!pn){ if(prev&&(s(r,C.grn)||s(r,C.sn)||s(r,C.lot))&&invNum(C.q>=0?r[C.q]:null)!=null){ name=prev.name; pn=prev.pn; } else continue; }   // CSV 沒有合併儲存格：同一品項的下一批 GRN
+        if(IH.name.test(normH(name))) continue;
+        const dueRaw=C.due>=0?r[C.due]:null, due=invDate(dueRaw), dueTxt=!due&&dueRaw!=null?s(r,C.due):"";
+        const e={name,pn:pn==="NIL"?"":pn,sn:s(r,C.sn),qty:invNum(C.q>=0?r[C.q]:null),qtyTxt:C.q>=0&&typeof r[C.q]==="string"&&/\D/.test(r[C.q])?s(r,C.q):"",due,loc:s(r,C.loc)||(/^(EMP|RMQ|KHH)-|^G1\d\d$|貨櫃屋/.test(dueTxt)?dueTxt:""),
+          note:[...C.note.map(k=>s(r,k)),dueTxt&&!/^(EMP|RMQ|KHH)-/.test(dueTxt)?dueTxt:"",s(r,C.cnt)?"清點 "+s(r,C.cnt):""].filter(Boolean).join("；"),grn:s(r,C.grn),cls:s(r,C.cls),lot:s(r,C.lot),temp:s(r,C.temp)};
+        if(!e.loc&&prev&&prev.name===name&&prev.pn===pn) e.loc=prev.loc||"";
+        list.push(e); prev=e; } }
+    // 合併儲存格展開後的重複列（同件號、同品名、同序號、同位置）合併成一列，數量相加
+    const out=[], seen={};
+    for(const e of list){ const k=[e.name,e.pn,e.sn,e.loc,e.box||""].join("|");
+      if(seen[k]&&!e.sn){ const a=seen[k]; if(e.qty!=null) a.qty=(a.qty||0)+e.qty; for(const f of ["grn","lot","note"]) if(e[f]&&!String(a[f]).includes(e[f])) a[f]=[a[f],e[f]].filter(Boolean).join("；"); if(e.due&&(!a.due||(e.due>=T&&(a.due<T||e.due<a.due)))) a.due=e.due; continue; }
+      const x={cat,...e}; for(const f of Object.keys(x)) if(x[f]===""||x[f]==null) delete x[f]; out.push(x); if(!e.sn) seen[k]=x; }
+    if(!out.length) continue;
+    if(cats[cat]){ items.push(...out); cats[cat].n+=out.length; continue; }
+    cats[cat]={n:out.length,date:cdate,sheet:sn}; items.push(...out); }
+  return {items,cats}; }
+const invDoc=st=>(M.stncap||{})["INV_"+st]||null;
+const invKey=s=>String(s||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+// 備註最後寫「回TPE／繳回」（之後沒有再「至RMQ」）→ 東西不在站上
+const invAway=e=>{ const n=String(e.note||"").toUpperCase(); const a=Math.max(n.lastIndexOf("回TPE"),n.lastIndexOf("繳回")); if(a<0) return false; return a>Math.max(n.lastIndexOf("至RMQ"),n.lastIndexOf("回RMQ"),n.lastIndexOf("至KHH"),n.lastIndexOf("回KHH")); };
+function invIndex(st){ const D=invDoc(st); if(!D) return null; if(D._ix) return D._ix; const ix=new Map(), awayBox=new Set();
+  for(const e of (D.items||[])) if(invAway(e)) for(const t of String([e.sn,e.pn].join(" ")).split(/[\s\/;、,()（）]+/)) if(t.length>=5) awayBox.add(t.toUpperCase());
+  for(const e of (D.items||[])){ const k=invKey(e.pn); if(k.length>=3){ if(!ix.has(k)) ix.set(k,[]); ix.get(k).push(e); } }
+  const keys=[...ix.keys()].filter(k=>k.length>=5).sort((a,b)=>b.length-a.length);
+  const nm=new Map(); for(const e of (D.items||[])){ const k=invKey(e.name); if(k.length>=6){ if(!nm.has(k)) nm.set(k,[]); nm.get(k).push(e); } }
+  const r={ix,keys,nm,awayBox}; Object.defineProperty(D,"_ix",{value:r,enumerable:false,configurable:true}); return r; }
+// 不在站上：備註寫回 TPE／繳回，或所屬工具箱已繳回
+const invGone=(st,e)=>invAway(e)||!!(e.box&&(invIndex(st)||{awayBox:new Set()}).awayBox.has(String(e.box).toUpperCase()));
+// 找需帶項目在站上的庫存：回傳 {rows, avail, total, why}
+function invFind(st,it,by){ const I=invIndex(st); if(!I) return null; const K=invKey(it.name);
+  let rows=null; if(K.length<3){ const zh=String(it.name).replace(/[\s\d×*]+|包|個|支|EA/gi,""); if(!/^[一-鿿]{2,}$/.test(zh)) return null;   // 中文名稱（溫度槍、油槍）：比對品名或備註
+    rows=(invDoc(st).items||[]).filter(e=>String(e.name||"").includes(zh)||String(e.note||"").includes(zh)); if(!rows.length) return null; }
+  if(!rows) rows=I.ix.get(K); if(!rows){ const k=I.keys.find(k=>K.includes(k)); rows=k?I.ix.get(k):null; }
+  if(!rows){ const word=String(it.name).toUpperCase().match(/[A-Z0-9][A-Z0-9\-\/\.]{4,}/g)||[]; for(const w of word){ const k=invKey(w); if(k.length>=5&&I.ix.has(k)){ rows=I.ix.get(k); break; } } }
+  if(!rows&&K.length>=6){ const k=I.keys.find(x=>x.startsWith(K)); if(k) rows=I.ix.get(k); }   // CA 1000 → CA1000-130ML
+  if(!rows) rows=I.nm.get(K)||I.nm.get(invKey(String(it.name).replace(/[（(].*$/,"")))||null;   // 品名完全相同（例如 ISOPROPANOL）
+  if(!rows) return null; const T=by||todayISO(); let avail=0, total=0; const why=new Set();
+  for(const e of rows){ const q=e.qty==null?1:e.qty; total+=q; if(invGone(st,e)){ why.add("已回 TPE／繳回"); continue; } if(e.due&&e.due<T){ if(q) why.add(`${e.cls==="CON"||e.cat==="GRN LIST"||e.cat==="一般耗材"?"效期":"校驗"} ${fmtD(e.due)} 已過`); continue; } avail+=q; }
+  if(avail) why.clear(); else if(!why.size) why.add("數量 0");   // 只要有一份可用就算有（其他批過期不影響）
+  const need=it.qty||1; if(avail&&avail<need) why.add(`只有 ${avail}，需 ${need}`);
+  return {rows,avail,total,why:[...why]}; }
+const invWhere=x=>[...new Set(x.rows.map(e=>[e.cat,e.loc].filter(Boolean).join(" ")))].slice(0,2).join("、");
+function invDlg(st){ const D=invDoc(st); let f="", cat="", warnOnly=false; const T=todayISO(), soon=addDays(T,45);
+  const d=openDlg(`<h3>${esc(st)} 站上庫存</h3>${D?`<p class="muted" style="font-size:12.5px">${esc(D.file||"")}　${esc(fmtT(D.at))}　共 ${(D.items||[]).length} 項。比對「${esc(st)}可執行」工單的需帶項目時，件號相符且有數量、未過期、未回 TPE，就算站上已有。</p>`:`<p>還沒有 ${esc(st)} 的庫存。按下方「匯入庫存」選庫存 Excel（工具裝備、PME、一般耗材、航材、GRN LIST、工具箱清單等工作表都可以），或各工作表另存的 CSV。</p>`}
+    ${D?`<div class="row" style="gap:8px;flex-wrap:wrap"><input id="invQ" placeholder="搜尋品名、件號、序號、位置" style="flex:1;min-width:160px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2)"><span class="seg" id="invC"></span><label style="font-size:12.5px"><input type="checkbox" id="invW"> 只看缺量／過期／45 天內到期</label></div>
+    <div id="invT" style="max-height:56vh;overflow:auto;margin-top:8px"></div>`:""}
+    <div class="foot">${D?`<button class="btn" id="invX">匯出</button>`:""}<button class="btn" id="invImp">${D?"更新庫存":"匯入庫存"}</button><button class="btn primary" data-x>關閉</button></div>`);
+  d.style.maxWidth="1150px"; d.querySelector("[data-x]").onclick=closeDlg;
+  { const fi=document.createElement("input"); fi.type="file"; fi.accept=".xlsx,.xls,.xlsm,.csv"; fi.multiple=true; fi.hidden=true; d.appendChild(fi);
+    d.querySelector("#invImp").onclick=()=>fi.click(); fi.onchange=async()=>{ const fs=[...fi.files]; fi.value=""; if(!fs.length) return; closeDlg(); ui.invSt=st; await handleFiles(fs,"inv"); ui.invSt=""; if(ui.view==="dsp") renderDsp(); }; }
+  if(!D) return; d.querySelector("#invX").onclick=()=>invExport(st);
+  const cats=Object.keys(D.cats||{}); const bad=e=>invGone(st,e)||e.qty===0||(e.due&&e.due<soon);
+  d.querySelector("#invC").innerHTML=[["","全部"],...cats.map(c=>[c,c])].map(([k,l])=>`<button class="chip ${k===""?"on":""}" data-ic="${esc(k)}">${esc(l)}${k?` <span class="muted">${D.cats[k].n}</span>`:""}</button>`).join("");
+  const draw=()=>{ const Q=f.trim().toUpperCase(); const L=(D.items||[]).filter(e=>(!cat||e.cat===cat)&&(!warnOnly||bad(e))&&(!Q||[e.name,e.pn,e.sn,e.loc,e.note,e.grn,e.box].join(" ").toUpperCase().includes(Q)));
+    d.querySelector("#invT").innerHTML=`${cat&&D.cats[cat]?`<p class="muted" style="font-size:12px;margin:0 0 4px">${esc(cat)}${D.cats[cat].date?"　清點日期 "+esc(fmtD(D.cats[cat].date)):""}${D.cats[cat].file?"　來源 "+esc(D.cats[cat].file):""}</p>`:""}<table class="cap-t"><tr><th>類別</th><th>品名</th><th>件號</th><th>序號／GRN</th><th>數量</th><th>效期／校驗</th><th>位置</th><th>備註</th></tr>${L.map(e=>{ const away=invGone(st,e), z=e.qty===0, ex=e.due&&e.due<T, sn=e.due&&!ex&&e.due<soon;
+      return `<tr><td>${esc(e.cat)}</td><td>${esc(e.name||"")}</td><td class="mono">${esc(e.pn||"")}</td><td class="mono it">${esc([e.sn,e.grn&&"GRN "+e.grn,e.lot&&"Lot "+e.lot].filter(Boolean).join("\n"))}</td><td class="mono ${z||away?"cap-no":""}">${esc(e.qtyTxt||(e.qty??""))}${away?"<br>已回 TPE／繳回":""}</td><td class="mono ${ex?"cap-no":sn?"cap-cond":""}">${esc(fmtD(e.due||""))}</td><td>${esc(e.loc||e.box||"")}</td><td class="it">${esc(e.note||"")}</td></tr>`; }).join("")}</table>${L.length?"":`<p class="muted">沒有符合的項目</p>`}`; };
+  d.querySelector("#invQ").oninput=e=>{ f=e.target.value; draw(); };
+  d.querySelector("#invW").onchange=e=>{ warnOnly=e.target.checked; draw(); };
+  d.querySelectorAll("[data-ic]").forEach(b=>b.onclick=()=>{ cat=b.dataset.ic; d.querySelectorAll("[data-ic]").forEach(x=>x.classList.toggle("on",x===b)); draw(); });
+  draw(); }
+function invExport(st){ const D=invDoc(st); if(!D||!window.XLSX) return; const T=todayISO();
+  const H=["類別","品名","件號","序號","數量","效期／校驗","位置","備註","GRN","狀態"];
+  const rows=(D.items||[]).map(e=>[e.cat,e.name||"",e.pn||"",e.sn||"",e.qtyTxt||(e.qty??""),fmtD(e.due||""),e.loc||e.box||"",e.note||"",e.grn||"",invGone(st,e)?"已回 TPE／繳回":e.qty===0?"數量 0":e.due&&e.due<T?"已過期":e.due&&e.due<addDays(T,45)?"45 天內到期":""]);
+  const ws=XLSX.utils.aoa_to_sheet([H,...rows]); ws["!cols"]=[12,40,22,18,7,11,18,40,14,11].map(w=>({wch:w}));
+  for(let c=0;c<H.length;c++){ const r=XLSX.utils.encode_cell({r:0,c}); ws[r].s={font:{bold:true,color:{rgb:"FFFFFF"}},fill:{fgColor:{rgb:"8C7266"}}}; }
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,st+"庫存"); return saveWb(wb,`${st}庫存_${T.replace(/-/g,"")}.xlsx`); }
+function pickStation(fname){ return new Promise(res=>{ const d=openDlg(`<h3>這是哪一站的庫存？</h3><p>「${esc(fname)}」的檔名看不出是 RMQ 還是 KHH。</p><div class="foot"><button class="btn" data-n>取消</button><button class="btn primary" data-s="RMQ">RMQ</button><button class="btn primary" data-s="KHH">KHH</button></div>`);
+  d.querySelector("[data-n]").onclick=()=>{ closeDlg(); res(""); }; d.querySelectorAll("[data-s]").forEach(b=>b.onclick=()=>{ closeDlg(); res(b.dataset.s); }); }); }
+async function importInvFile(wb,f){ const r=importInv(wb,f.name); const cats=Object.keys(r.cats);
+  if(!r.items.length){ showMsg("讀不到庫存",`<p>「${esc(f.name)}」找不到品名＋件號的表頭（例如 Description／P/N、Item／Item Description、Tool name／PN）。</p>`); return; }
+  let st=(String(f.name).toUpperCase().match(/RMQ|KHH/)||[])[0]||ui.invSt||"";
+  if(!st){ const locs=r.items.map(e=>String(e.loc||"")+" "+String(e.note||"")).join(" ").toUpperCase(); st=/RMQ-/.test(locs)&&!/KHH-/.test(locs)?"RMQ":/KHH-/.test(locs)&&!/RMQ-/.test(locs)?"KHH":""; }
+  if(!st) st=await pickStation(f.name); if(!st) return;
+  const old=invDoc(st); const keep=(old&&old.items||[]).filter(e=>!cats.includes(e.cat));
+  const repl=cats.filter(c=>old&&old.cats&&old.cats[c]);
+  if(!await confirmDlg(`匯入 ${st} 庫存`,`<p>「${esc(f.name)}」：${cats.map(c=>`${esc(c)} ${r.cats[c].n} 項`).join("、")}。</p>${repl.length?`<p>會取代目前 ${st} 庫存的「${repl.map(esc).join("、")}」，其他類別不變。</p>`:""}<p class="muted">庫存只用來比對外站需帶的料件／工具，不會改動工單。</p>`,"匯入")) return;
+  const C={...(old&&old.cats||{})}; for(const c of cats) C[c]={...r.cats[c],file:f.name};
+  const doc={station:st,file:f.name,at:new Date().toISOString(),by:me&&me.id||"",cats:C,items:[...keep,...r.items]};
+  await B.setCap("INV_"+st,doc); B.addLog({kind:st+" 庫存",file:f.name,n:r.items.length,at:doc.at,by:doc.by}); B.audit({act:"外站庫存",to:`${st}：${cats.join("、")}`});
+  invalidate(); render(); showMsg(`${st} 庫存已匯入`,`<p>${cats.map(c=>`${esc(c)} ${r.cats[c].n} 項`).join("、")}，${st} 庫存共 ${doc.items.length} 項。</p><p>「${esc(st)}可執行」工單的需帶項目，件號在庫存裡有數量、未過期的，會改列「站上已有」。</p>`); }
 /* ---------- 優先排工: 長工時／指定授權・SKILL／水消、ENG WASH、BSI、AD/SB 先排，修管指定（料到安排）的另列 ---------- */
 const PRI={shop:{t:"修管指定",g:"mx",c:"pri-mx",d:"BATTERY、SLIDE、ELT、ULB 等送修（SHOP／PBTH），修管依料到指定日期"},water:{t:"水消",g:"plan",d:"只能排 日～四，且只能在 TPE 執行（遇紅休、不收水日請詢問修管）"},engwash:{t:"ENG WASH",g:"plan",d:"A330 需在 TPE 地停 13 小時以上（回 TPE 後引擎須冷卻 8 小時才能做）；A321／A359／A351 無此限制"},bsi:{t:"BSI",g:"plan"},sb:{t:"AD／SB",g:"plan"},av:{t:"AV SKILL",g:"plan"},auth:{t:"指定授權",g:"plan"},skill:{t:"指定 SKILL",g:"plan"},long:{t:"長工時",g:"plan"}};
 // planner's card lists (10/16): 水消 and ENG WASH are recognised by MR only
@@ -2403,6 +2527,7 @@ async function handleFiles(files,forced){
         showMsg("檔案有加密保護",`<p>「${esc(f.name)}」有公司的加密保護（敏感度標籤或密碼），只有 Excel 打得開，網頁讀不到。</p><p>可以用沒有加密的版本；或在 Excel 開啟後「檔案 → 另存新檔」，存檔類型選「CSV UTF-8」（只存目前的工作表）再匯入。是否可另存為未加密版本，請依公司規定。</p>`);
       else showMsg("無法讀取檔案",`<p>${esc(f.name)} 不是可讀取的 Excel 檔（${esc(e.message)}）。</p>`); continue;}
       if(isFlightBook(wb)){ leaveDemo(); await importFlights(f); continue; }
+      if(forced==="inv"||(!isCapBook(wb)&&isInvBook(wb))){ await importInvFile(wb,f); continue; }
       if(isCapBook(wb)){ const r=importCap(wb,f.name); if(!r.ok&&r.msg){ showMsg("無法匯入外站清單",`<p>${esc(r.msg)}</p>`); continue; }
         const old=(M.stncap||{})[r.st]; if(old&&!await confirmDlg(`更新 ${r.st} 可執行清單`,`<p>「${esc(f.name)}」：${r.n} 張工卡${r.ns?`、常備物料 ${r.ns} 項`:""}。<br>會取代目前的 ${r.st} 清單（${esc(old.file||"")}，${Object.keys(old.cards||{}).length} 張）。</p>`,"取代")) continue;
         await B.setCap(r.st,r.doc); B.addLog({kind:r.st+" 可執行清單",file:f.name,n:r.n,at:r.doc.at,by:r.doc.by}); B.audit({act:"外站清單",to:`${r.st}：${r.n} 張工卡`});
