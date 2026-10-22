@@ -1928,7 +1928,16 @@ async function importFlights(file){
   const prePlan={}; derive().all.forEach(w=>{ if(w.st!=="done"&&w.auto&&!w.sched&&w.projD) prePlan[w.wo]=w.projD; });
   const SUB={"32Q":"A321","321":"A321","339":"A330","333":"A330","330":"A330","359":"A359","351":"A351"};
   const now=new Date().toISOString(), by_=me&&me.id||"";
-  for(const t of tails){ const legs=by[t].sort((a,b)=>a[2]<b[2]?-1:1); await B.setFlights(t,{tail:t,type:SUB[sub[t]]||typeOf(t),legs,file:file.name,at:now,by:by_}); }
+  // 合併：檔案涵蓋的日期（最早～最晚出發日）以檔案為準；檔案之前的舊航段保留到「檔案起始月份的 1 日」為止，更早的清掉
+  // 例：10/1 匯入 10/1～11/30；10/22 匯入 10/22～11/30 → 10/1～10/21 保留；11/1 匯入 11/1～12/31 → 10 月清除
+  let fFrom="9999", fTo=""; for(const t of tails) for(const l of by[t]){ if(l[2]<fFrom) fFrom=l[2]; if(l[2]>fTo) fTo=l[2]; }
+  const winA=fFrom.slice(0,10), winB=fTo.slice(0,10), keepFrom=winA.slice(0,8)+"01"; let keptN=0, purgedN=0;
+  for(const t of [...new Set([...tails,...Object.values(M.flights||{}).map(d=>d&&d.tail).filter(Boolean)])].sort()){
+    const old=(M.flights||{})[safeKey(t)], oldLegs=old&&Array.isArray(old.legs)?old.legs:[];
+    const keep=oldLegs.filter(l=>{ const d=String(l[2]||"").slice(0,10); if(d>=winA&&d<=winB) return false; if(d<keepFrom){ purgedN++; return false; } keptN++; return true; });
+    const legs=[...keep,...(by[t]||[])].sort((a,b)=>a[2]<b[2]?-1:1);
+    if(!by[t]&&keep.length===oldLegs.length) continue;   // 這架不在檔案裡、舊資料也沒變動
+    await B.setFlights(t,{tail:t,type:by[t]?(SUB[sub[t]]||typeOf(t)):(old.type||typeOf(t)),legs,file:file.name,at:now,by:by_}); }
   invalidate(); const X=FLX(); const after=derive().all.filter(w=>w.flNo);
   // shared record of what this flight file changed, so the other planner sees it too (今日控管「航班更新提醒」)
   { const A_=derive().all; const mv=A_.filter(w=>w.st!=="done"&&w.auto&&!w.sched&&prePlan[w.wo]&&w.projD&&prePlan[w.wo]!==w.projD).map(w=>[w.wo,w.tail,cardOf(w),prePlan[w.wo],w.projD]);
@@ -1938,7 +1947,7 @@ async function importFlights(file){
   const neu=after.filter(w=>!before.has(w.wo)), moved=derive().all.filter(w=>w.projWas&&w.auto&&w.st!=="done"), risk=derive().all.filter(w=>w.flLast&&w.st!=="done");
   const row=w=>`<tr><td class="mono">${esc(w.tail)}</td><td class="mono">${esc(w.wo)}</td><td><b class="mono">${esc(cardOf(w))}</b> <span class="muted">${esc((w.title||"").slice(0,40))}</span></td><td class="mono">${esc(fmtD(w.flNo.d).slice(5))}</td><td>${esc(w.flNo.trip?(w.flNo.trip.mx?w.flNo.trip.st+" 大修":w.flNo.trip.far?"長程 "+w.flNo.trip.via.slice(0,2).join("→"):"駐 "+w.flNo.trip.st):"只有過站")}</td></tr>`;
   const skN=Object.values(skip).reduce((a,b)=>a+b,0);
-  showMsg("航班已匯入",`<p>${esc(file.name)}：<b>${tails.length}</b> 架、<b>${n}</b> 個航段，涵蓋 ${esc(fmtD(X.from))}～${esc(fmtD(X.to))}。${skN?`<br><span class="muted" style="font-size:12.5px">已自動略過非航班列 ${skN} 筆（${esc(Object.entries(skip).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+" "+v).join("、"))}）；HMV 保留。時間使用 LTD／LTA（當地時間）。</span>`:""}</p>
+  showMsg("航班已匯入",`<p>${esc(file.name)}：<b>${tails.length}</b> 架、<b>${n}</b> 個航段，這份檔案 ${esc(fmtD(winA))}～${esc(fmtD(winB))}，目前航班資料涵蓋 ${esc(fmtD(X.from))}～${esc(fmtD(X.to))}。${keptN||purgedN?`<br><span class="muted" style="font-size:12.5px">${keptN?`保留檔案日期以外的舊航段 ${keptN} 筆`:""}${keptN&&purgedN?"；":""}${purgedN?`已清除 ${esc(fmtD(keepFrom))} 以前的航段 ${purgedN} 筆`:""}。</span>`:""}${skN?`<br><span class="muted" style="font-size:12.5px">已自動略過非航班列 ${skN} 筆（${esc(Object.entries(skip).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+" "+v).join("、"))}）；HMV 保留。時間使用 LTD／LTA（當地時間）。</span>`:""}</p>
     <ul><li>RMQ／KHH 駐站改由航班自動產生（航班涵蓋範圍外仍用駐站表）。</li>
     <li>短天期預排避開飛機不在可做工地停的日子：<b>${moved.length}</b> 張已自動提前。</li>
     <li>短天期 DUE 當天飛機不在台、需提前做：<b>${risk.length}</b> 張（標「DUE 前最後可做工」）。</li>
