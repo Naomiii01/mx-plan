@@ -2808,7 +2808,7 @@ function retFollowDlg(id){
   const d=openDlg(`<h3>更新退工進度</h3>
     <p><b class="mono">${esc(x.wo)}</b>　${esc(x.tail||"")}　<span class="mono">${esc(recCard(x))}</span>${(x.holds||[]).length?`<br><span class="mini warn">同卡號暫停安排 ${x.holds.length} 架：${esc(x.holds.map(h=>h.tail).sort().join("、"))}（改為已澄清後自動恢復可安排）</span>`:""}<br>${esc(fmtD(x.date))} 退工：${esc(x.reason||"")}${x.note?"，"+esc(x.note):""}<br>目前：<span class="mini ${RETC[retProgress(x).k]}">${esc(retProgress(x).t)}</span>${w&&w.sched?`　排定 <b class="mono">${esc(fmtD(w.sched))}</b>`:""}</p>
     ${tl?`<div class="preview"><table><tr><th>日期</th><th>單位</th><th>回覆人</th><th>內容</th></tr>${tl}</table></div>`:""}
-    ${AI&&!AI.local?`<div class="fu-ai"><label style="display:block;margin-bottom:6px;font-weight:600">從回覆信件帶入 <span class="muted" style="font-weight:400;font-size:12px">貼上信件文字或截圖，按「讀取」後自動填入下方欄位，核對後儲存</span></label>
+    ${AI?`<div class="fu-ai"><label style="display:block;margin-bottom:6px;font-weight:600">從回覆信件帶入 <span class="muted" style="font-weight:400;font-size:12px">貼上信件文字或截圖，按「讀取」後自動填入下方欄位，核對後儲存</span></label>
       ${aiImg?`<div class="drop" id="fuDrop" tabindex="0" style="margin:0 0 6px;display:block">${matchMedia("(pointer:coarse)").matches?"點這裡從相簿選擇信件截圖":"在這裡按 <b>Ctrl+V</b> 貼上信件截圖，或拖曳、<u>選擇圖片</u>"}</div><div id="fuThumbs" style="display:flex;gap:8px;flex-wrap:wrap"></div>`:""}
       <textarea id="fuText" style="width:100%;min-height:90px;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:8px;font-size:13px" placeholder="在 Outlook 按轉寄後全選複製，貼在這裡（也可以直接在這裡 Ctrl+V 貼截圖）"></textarea><div class="row"><button class="btn primary" id="fuRead">讀取</button><span id="fuSt" style="font-size:12.5px;color:var(--ink-2)"></span></div></div>`:""}
     <div class="row"><label for="fuDate">日期</label><input type="date" id="fuDate" value="${todayISO()}" style="border:1px solid var(--line);background:var(--panel-2);border-radius:6px;padding:6px 10px"><label for="fuParty">單位</label><select id="fuParty">${PARTY.map(p=>`<option>${p}</option>`).join("")}</select><label for="fuSender">回覆人</label><input id="fuSender" ${inp} placeholder="例：Sylvie Shen 沈意佩"></div>
@@ -2829,7 +2829,7 @@ function retFollowDlg(id){
     fdz.addEventListener("dragover",e=>e.preventDefault()); fdz.addEventListener("drop",e=>{ e.preventDefault(); fuAdd([...e.dataTransfer.files]); }); }
   d.querySelectorAll("#fuDrop,#fuText").forEach(el=>el.addEventListener("paste",e=>{ const fs=[...(e.clipboardData&&e.clipboardData.files||[])]; if(fs.length&&aiImg){ e.preventDefault(); fuAdd(fs); } }));
   const rb=d.querySelector("#fuRead"); if(rb) rb.onclick=async()=>{ const t=d.querySelector("#fuText").value.trim(), st=d.querySelector("#fuSt"); if(!t&&!fuImgs.length){ st.textContent="請先貼上信件文字或截圖"; return; }
-    st.textContent="Claude 正在讀取…（約 10–30 秒）"; rb.disabled=true;
+    st.textContent=aiBusyMsg(fuImgs.length,"10–30"); rb.disabled=true;
     try{ const o=await AI.json(FOLLOW_PROMPT+`\n\n這張工單：WO ${x.wo}，${x.tail}，${recCard(x)}，退工原因 ${x.reason}（${x.note||""}）。今天是 ${todayISO()}。`+(t?`\n\n=== 信件 ===\n`+t.slice(0,15000):""),fuImgs.length?{images:fuImgs}:{});
       if(o){ if(parseDate(o.date)) d.querySelector("#fuDate").value=parseDate(o.date); if(PARTY.includes(o.party)) d.querySelector("#fuParty").value=o.party; if(o.sender) d.querySelector("#fuSender").value=o.sender; if(o.note) d.querySelector("#fuNote").value=o.note; if(CLAR[o.clar]){ d.querySelector("#fuClar").value=o.clar; d.querySelector("#fuClar").onchange(); } if(parseDate(o.newDate)) d.querySelector("#fuNew").value=parseDate(o.newDate); }
       st.textContent="已填入，請核對後儲存。"; }catch(e){ st.textContent="讀取失敗，請手動填寫。"; } finally{ rb.disabled=false; } };
@@ -3575,7 +3575,7 @@ function noticeScope(n){ const ts=n.tails&&n.tails.length?n.tails:["ALL"]; retur
 function noticeBlock(D){
   const L=noticesOn(D).filter(n=>ui.dayTail?noticeHits(n,ui.dayTail):!ui.dayType||(n.tails||["ALL"]).some(x=>x==="ALL"||x===ui.dayType||typeOf(x)===ui.dayType)); const ro=canWrite===false;
   const rows=L.map(n=>`<div class="nt"><span class="nt-time mono">${esc(n.time||"全天")}</span><span class="nt-scope">${esc(noticeScope(n))}</span><span class="nt-text">${esc(n.text)}${n.until&&n.until!==n.date?`<span class="days">${esc(fmtD(n.date).slice(5))}～${esc(fmtD(n.until).slice(5))}</span>`:""}${n.src?`<span class="days">來源：${esc(n.src)}</span>`:""}</span>${ro?"":`<span class="nt-act"><button class="btn ghost sm" data-nedit="${esc(n.date)}|${esc(n.id)}" aria-label="編輯">編輯</button><button class="btn ghost sm" data-ndel="${esc(n.date)}|${esc(n.id)}" aria-label="刪除">×</button></span>`}</div>`).join("");
-  return {n:L.length,html:`${rows||`<div class="empty sm">這一天沒有注意事項</div>`}${ro?"":`<div class="row nt-add"><button class="btn sm" data-nadd>＋ 新增注意事項</button>${AI&&!AI.local?`<button class="btn sm" data-nai>從信件／截圖帶入</button>`:""}</div>`}`};
+  return {n:L.length,html:`${rows||`<div class="empty sm">這一天沒有注意事項</div>`}${ro?"":`<div class="row nt-add"><button class="btn sm" data-nadd>＋ 新增注意事項</button>${AI?`<button class="btn sm" data-nai>從信件／截圖帶入</button>`:""}</div>`}`};
 }
 /* 例行（無 WO）: short-interval tasks 修管 never issues a WO for — planned straight from the cycle on every aircraft */
 function routineList(D){
@@ -3736,7 +3736,7 @@ function noticeDlg(D,useAI,edit){
   NI={rows:[edit?{date:edit.date,until:edit.n.until||"",time:edit.n.time||"",tails:(edit.n.tails||[]).filter(t=>t!=="ALL").join(", ")||(edit.n.tails||[]).join(", "),text:edit.n.text||""}:{date:D,until:"",time:"",tails:"",text:""}],imgs:[],busy:false,ctl:null,edit:edit||null};
   const aiOK=!!(AI&&aiImg), ta='style="border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:8px 10px;font-size:13px;font-family:var(--sans);width:100%;min-height:80px"';
   const d=openDlg(`<h3>${edit?"編輯注意事項":useAI?"從信件／截圖帶入注意事項":"新增注意事項"}</h3>
-    ${useAI&&AI&&!AI.local?`${aiOK?`<div class="drop" id="niDrop" tabindex="0" style="margin:0;display:block">${matchMedia("(pointer:coarse)").matches?"點這裡從相簿選擇信件截圖":"在這裡按 <b>Ctrl+V</b> 貼上信件截圖，或拖曳、<u>選擇圖片</u>"}</div><div id="niThumbs" style="display:flex;gap:8px;flex-wrap:wrap"></div>`:""}
+    ${useAI&&AI?`${aiOK?`<div class="drop" id="niDrop" tabindex="0" style="margin:0;display:block">${matchMedia("(pointer:coarse)").matches?"點這裡從相簿選擇信件截圖":"在這裡按 <b>Ctrl+V</b> 貼上信件截圖，或拖曳、<u>選擇圖片</u>"}</div><div id="niThumbs" style="display:flex;gap:8px;flex-wrap:wrap"></div>`:""}
       <textarea id="niText" ${ta} placeholder="${aiOK?"或":""}貼上信件文字，例如：10/5 09:30 CAA 適航查核 B-58203，請於 5 號機坪備妥…"></textarea>
       <div class="row"><button class="btn primary" id="niRead">讀取</button><span id="niStatus" style="font-size:12.5px;color:var(--ink-2)"></span></div>`:""}
     <p style="font-size:12.5px;color:var(--ink-3);margin:0">機號可填多個（逗號分隔），也可填機型（A321）或 ALL 表示全機隊。持續多天請填「到」。</p>
@@ -3767,7 +3767,7 @@ function niDraw(){ const c='style="border:1px solid var(--line);background:var(-
 async function niRead(){
   if(!NI||NI.busy) return; const st=$("#niStatus"); const txt=(($("#niText")||{}).value||"").trim();
   if(!NI.imgs.length&&!txt){ st.textContent="請先貼上截圖或文字"; return; }
-  NI.busy=true; NI.ctl=new AbortController(); st.textContent="Claude 正在讀取…（約 10–30 秒）";
+  NI.busy=true; NI.ctl=new AbortController(); st.textContent=aiBusyMsg(NI.imgs.length,"10–30");
   const prompt=NOTE_PROMPT+`\n\n今天是 ${todayISO()}。`+(txt?"\n\n=== 信件文字 ===\n"+txt.slice(0,20000):"");
   try{ const out=await AI.json(prompt,NI.imgs.length?{images:NI.imgs,signal:NI.ctl.signal}:{signal:NI.ctl.signal});
     const items=(out&&Array.isArray(out.items)?out.items:[]).map(x=>({date:parseDate(x.date)||todayISO(),until:parseDate(x.until)||"",time:String(x.time||"").trim(),tails:(Array.isArray(x.tails)?x.tails:[]).map(t=>String(t).toUpperCase().replace(/^B(\d)/,"B-$1")).join(", "),text:String(x.text||"").trim()})).filter(x=>x.text);
@@ -4796,17 +4796,71 @@ const LX=(()=>{
         const rest=l.replace(w[0],"").replace(/B-?\d{5}/i,"").replace(/\d{1,2}\/\d{1,2}(\/\d{4})?/,"").trim();
         rows.push({wo:w[1],card:cardOfText(l),title:"",tail:tailOf(l),date:(D[0]||{}).d||(M_.sentAt||"").slice(0,10)||"",reason:reasonPick(l,list),note:rest.slice(0,60),newDate:/改排|改至|改到|延至|重排|排到/.test(l)?((D[D.length-1]||{}).d||""):"",clar:/澄清|不符/.test(l)?"eng":"none"}); } }
     return {rows}; }
-  return {adhoc,ret,dates,mails};
+  /* ---- 退工進度回覆（工程／修管回信） ---- */
+  function fu(txt){ const yr=new Date().getFullYear(); const M_=mails(txt)[0]||{text:txt}; const y=(M_.sentAt||"").slice(0,4)||yr;
+    // only the newest mail: stop at the quoted original (second 寄件者／From／-----Original)
+    const L=M_.text.split("\n"); let end=L.length; for(let i=1;i<L.length;i++) if(/^\s*(寄件者|From)\s*[:：]|-{3,}\s*(Original|原始郵件)/i.test(L[i])){ end=i; break; }
+    const body=L.slice(0,end).filter(l=>!/^\s*(寄件者|From|寄件日期|傳送時間|Sent|收件者|To|副本|CC|主旨|Subject|重要性)\s*[:：]/i.test(l)).map(l=>l.trim()).filter(l=>l&&!/^(HI|DEAR|您好|Hello)\b|^(謝謝|THANKS|BEST|REGARDS|BR)\b|@/i.test(l)).join(" ");
+    const all=(M_.from||"")+" "+(M_.subject||"")+" "+body;
+    const party=/工程|ENGINEER|\bEDE\d|\bTMC\b|\bTE\b/i.test(all)?"工程":/修管|維修管理|\bMCC\b/i.test(all)?"修管":/\bMPS\b/i.test(M_.from||"")?"MPS":/\bMES\b/i.test(M_.from||"")?"MES":/現場|棚廠/.test(all)?"現場":"";
+    const clar=/已(進版|修正|更新|澄清|改版|發佈|發行)|可接受|請(重新)?安排|重新發工|可以執行|可執行|OK\b/i.test(body)?"done":/待工程|工程(評估|確認)中|等待工程/.test(body)?"eng":/待修管|修管(評估|確認)中/.test(body)?"mps":"none";
+    let newDate=""; { const m=body.match(/(改排|重新安排|安排於|安排在|改至|延至|重新執行|執行日)[^。；;]{0,30}/); if(m) newDate=(dates(m[0],y)[0]||{}).d||""; }
+    let note=body.replace(/^[^，,。\s]{0,10}(您好|你好|好)[，,\s]*/,"").replace(/[，,\s]*(謝謝|感謝|THANKS?)[^。]*$/i,"").replace(/\s+/g," ").replace(/([^\x00-\x7F]) (?=[^\x00-\x7F])/g,"$1").trim(); if(note.length>80) note=note.slice(0,78)+"…";
+    return {date:(M_.sentAt||"").slice(0,10)||((dates(body,y)[0]||{}).d||""),party,sender:M_.from||"",note,clar,newDate}; }
+  /* ---- 注意事項（一封信一筆） ---- */
+  function note(txt){ const yr=new Date().getFullYear(); const items=[];
+    for(const M_ of mails(txt)){ const y=(M_.sentAt||"").slice(0,4)||yr;
+      const body=M_.text.split("\n").filter(l=>!/^\s*(寄件者|From|寄件日期|傳送時間|Sent|收件者|To|副本|CC|主旨|Subject|重要性)\s*[:：]/i.test(l)).map(l=>l.trim()).filter(l=>l&&!/^(HI|DEAR|您好|Hello)\b|^(謝謝|THANKS|BEST|REGARDS|BR)\b|@/i.test(l));
+      const b=body.join("\n"); if(!b.trim()&&!M_.subject) continue;
+      const D=dates(b,y); let date=(D[0]||{}).d||(M_.sentAt||"").slice(0,10)||"", until="";
+      const rg=b.match(/(\d{1,2}\/\d{1,2}|[A-Z]{3}\/\d{1,2})\s*[~～\-至到]\s*(\d{1,2}\/\d{1,2}|[A-Z]{3}\/\d{1,2})/i); if(rg){ const a=dates(rg[0],y); if(a.length>=2){ date=a[0].d; until=a[1].d; } }
+      const tm=b.match(/\b(\d{1,2}:\d{2})(?:\s*[~～\-至到]\s*(\d{1,2}:\d{2}))?/); const time=tm?(tm[2]?tm[1]+"-"+tm[2]:tm[1]):"";
+      const tails=[...new Set((b+" "+(M_.subject||"")).toUpperCase().match(/\bB-?\s?\d{5}\b/g)||[])].map(t=>"B-"+t.replace(/\D/g,""));
+      const ty=(b+" "+(M_.subject||"")).toUpperCase().match(/\bA3(21|30|59|51)\b/g)||[]; if(!tails.length&&ty.length) tails.push(...new Set(ty)); if(!tails.length&&/全機隊|ALL\s*A\/C|所有(航機|飛機)/i.test(b)) tails.push("ALL");
+      let text=(M_.subject||"").replace(/^(RE|FW|FWD)\s*[:：]\s*/i,"").trim(); const first=body.find(l=>/[一-鿿]/.test(l)&&l.length>=6)||""; if(!text||text.length<6) text=first; else if(first&&!first.includes(text)) text=text+"："+first;
+      text=text.replace(/([^\x00-\x7F]) (?=[^\x00-\x7F])/g,"$1"); if(text.length>70){ const c=text.slice(0,70); const k=Math.max(c.lastIndexOf("，"),c.lastIndexOf("。")); text=k>30?c.slice(0,k):c; }
+      items.push({date,until,time,tails,text}); }
+    return {items}; }
+  return {adhoc,ret,fu,note,dates,mails};
 })();
-const LOCAL_AI={local:true, async limits(){ return null; },
-  async json(prompt){ const txt=(k=>{ const i=prompt.indexOf(k); return i<0?"":prompt.slice(i+k.length); });
-    if(prompt.includes("=== 退工資料 ===")){ const L=((prompt.match(/照抄文字：(.+?)。/)||[])[1]||"").split("、").map(s=>s.trim()).filter(Boolean); return LX.ret(txt("=== 退工資料 ===\n"),L.length?L:reasonsOf("retReasons")); }
-    if(prompt.includes("=== 信件內容 ===")) return LX.adhoc(txt("=== 信件內容 ===\n"));
-    const e=new Error("local"); e.code="sampling_disabled"; throw e; } };
+/* ---------- 截圖文字辨識（網站版沒有 Claude 時用 Tesseract.js，在瀏覽器裡辨識，圖片不會上傳） ---------- */
+let _ocrW=null;
+function ocrWorker(){ return _ocrW||(_ocrW=(async()=>{
+  if(!window.Tesseract) await new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"; sc.onload=res; sc.onerror=()=>rej(new Error("辨識元件下載失敗")); document.head.appendChild(sc); });
+  return Tesseract.createWorker(["chi_tra","eng"],1,{logger:m=>{ if(window.__ocrProg) window.__ocrProg(m); }}); })().catch(e=>{ _ocrW=null; throw e; })); }
+async function ocrImages(files,signal){ const w=await ocrWorker(); const out=[];
+  for(const f of files){ if(signal&&signal.aborted){ const e=new Error("cancelled"); e.code="cancelled"; throw e; }
+    const bm=await createImageBitmap(f); const k=bm.width<1400?2:1; const c=document.createElement("canvas"); c.width=bm.width*k; c.height=bm.height*k;
+    const g=c.getContext("2d"); g.imageSmoothingQuality="high"; g.drawImage(bm,0,0,c.width,c.height);
+    const r=await w.recognize(c); out.push(ocrNorm(r.data.text||"")); }
+  return out.join("\n\n"); }
+// 辨識結果整理：去掉中文字之間的空格、修正常見誤認，並把截圖上方的寄件人／時間／主旨補成「寄件者：」等表頭，讓信件解析照常運作
+function ocrNorm(t){ let s=String(t).replace(/\r/g,"");
+  for(let i=0;i<3;i++) s=s.replace(/([一-鿿\u3000-\u303f\uff00-\uffef]) +(?=[一-鿿\u3000-\u303f\uff00-\uffef])/g,"$1");
+  s=s.replace(/\bA[\/V\\|lI1]C\b/g,"A/C").replace(/\bW\s?O\s?NO\b/gi,"WO NO").replace(/\bB\s*[-—–~]\s*(\d{5})\b/g,"B-$1").replace(/[|｜]/g," ").replace(/ +/g," ");
+  s=s.replace(/ ?, ?(?=[一-鿿])/g,"，").replace(/([一-鿿]) ?, ?/g,"$1，").replace(/ ?。/g,"。");
+  s=s.replace(/(\d{4})\/(\d{1,2})\/(\d{1,2})\s*(?:[\(（][^)）]*[\)）])?\s*(上午|下午)?\s*(\d{1,2}):(\d{2})/,(m,y,mo,d,ap,h,mi)=>`${y}年${mo}月${d}日 ${ap||""} ${h}:${mi}`)
+       .replace(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\w*\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*(AM|PM)?/i,(m,mo,d,y,h,mi,ap)=>{ let H=+h; if(/PM/i.test(ap||"")&&H<12) H+=12; if(/AM/i.test(ap||"")&&H===12) H=0; return `${y}/${mo}/${d} ${String(H).padStart(2,"0")}:${mi}`; });
+  if(!/^\s*(寄件者|From)\s*[:：]/im.test(s)){ const L=s.split("\n"); const di=L.findIndex(l=>/\d{4}年\d{1,2}月\d{1,2}日.*\d{1,2}:\d{2}|\d{4}\/\d{1,2}\/\d{1,2} \d{1,2}:\d{2}/.test(l));
+    if(di>=0&&di<10){ let si=-1; for(let i=di;i>=0&&i>=di-3;i--) if(/@|<.+>|[A-Za-z]+ [A-Za-z]+ ?[一-鿿]{2,4}/.test(L[i])&&i!==di){ si=i; break; }
+      const sender=si>=0?L[si].replace(/<[^>]*>?|\S+@\S+/g,"").trim():""; const subj=L.slice(0,si>=0?si:di).map(x=>x.trim()).filter(Boolean)[0]||"";
+      const head=[sender?"寄件者: "+sender:"寄件者: ","寄件日期: "+L[di].trim(),subj?"主旨: "+subj:""].filter(Boolean);
+      s=[...head,...L.filter((_,i)=>i!==di&&i!==si&&!(subj&&L[i].trim()===subj))].join("\n"); } }
+  return s; }
+const LOCAL_AI={local:true, async limits(){ return {images:{maxCount:6,mediaTypes:["image/png","image/jpeg","image/webp","image/gif","image/bmp"]}}; },
+  async json(prompt,opt){ opt=opt||{}; const after=k=>{ const i=prompt.indexOf(k); return i<0?"":prompt.slice(i+k.length); };
+    const kind=prompt.includes("關於一張被現場退回的工單")?"fu":prompt.includes("需要現場注意的臨時事項")?"note":prompt.includes("被現場退回")||prompt.includes("=== 退工資料 ===")?"ret":prompt.includes("臨時工作加入維修計畫")||prompt.includes("=== 信件內容 ===")?"adhoc":"";
+    if(!kind){ const e=new Error("local"); e.code="sampling_disabled"; throw e; }
+    let txt=after({fu:"=== 信件 ===\n",note:"=== 信件文字 ===\n",ret:"=== 退工資料 ===\n",adhoc:"=== 信件內容 ===\n"}[kind]);
+    if(opt.images&&opt.images.length) txt=(await ocrImages(opt.images,opt.signal))+(txt?"\n\n"+txt:"");
+    if(kind==="ret"){ const L=((prompt.match(/照抄文字：(.+?)。/)||[])[1]||"").split("、").map(s=>s.trim()).filter(Boolean); return LX.ret(txt,L.length?L:reasonsOf("retReasons")); }
+    if(kind==="adhoc") return LX.adhoc(txt); if(kind==="fu") return LX.fu(txt); return LX.note(txt); } };
+// 讀取中的提示：網站版辨識截圖第一次要下載辨識資料
+const aiBusyMsg=(imgs,sec)=>AI&&AI.local?(imgs?"辨識截圖文字中…（第一次使用要下載辨識資料，約 10–40 秒）":"解析中…"):`Claude 正在讀取…（約 ${sec||"10–40"} 秒）`;
 
 async function initAI(){
   if(window.claude&&window.claude.use){ try{ AI=await window.claude.use("sample"); if(AI){ const l=await AI.limits().catch(()=>null); aiImg=l&&l.images||null; } }catch(e){ AI=null; } }
-  if(!AI){ AI=LOCAL_AI; aiImg=null; }  // 網站版：沒有 Claude 時改用規則解析貼上的文字
+  if(!AI){ AI=LOCAL_AI; aiImg=(await AI.limits()).images; }  // 網站版：沒有 Claude 時改用規則解析貼上的文字；截圖先在瀏覽器裡辨識文字
 }
 const AH_FIELDS=[["action","動作",78],["wo","WO",90],["tail","機號",92],["pkgType","類別",80],["mr","MR / EO / AD",150],["title","工作名稱",260],["start","可執行起日",128],["due","到期日",128],["pkgId","Pkg ID",170],["remark","備註",170]];
 const AI_PROMPT=`你會看到航空公司維修計畫課收到的信件截圖（一張或多張），內容是要求把臨時工作加入維修計畫。
@@ -4848,7 +4902,7 @@ function openRetImport(){
   RI={rows:[{}],imgs:[],busy:false,ctl:null};
   const aiOK=!!(AI&&aiImg), inp='style="border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:8px 10px;font-size:13px;font-family:var(--sans)"';
   const d=openDlg(`<h3>匯入退工</h3>
-    <p>一次登錄多筆退工。${AI&&AI.local?"可以貼上退工信件文字自動帶入":"可以貼截圖或文字讓 Claude 讀取"}，也可以直接在下方表格輸入。</p>
+    <p>一次登錄多筆退工。${AI&&AI.local?"可以貼上退工信件的文字或截圖自動帶入":"可以貼截圖或文字讓 Claude 讀取"}，也可以直接在下方表格輸入。</p>
     ${aiOK?`<div class="drop" id="riDrop" tabindex="0" style="margin:0;display:block">${matchMedia("(pointer:coarse)").matches?`點這裡從相簿選擇退工截圖`:`在這裡按 <b>Ctrl+V</b> 貼上退工截圖，或拖曳、<u>選擇圖片</u>`}（最多 ${aiImg.maxCount} 張）</div>
       <div id="riThumbs" style="display:flex;gap:8px;flex-wrap:wrap"></div>
       <div class="row"><button class="btn primary" id="riRead" disabled>讀取截圖</button><span id="riStatus" style="font-size:12.5px;color:var(--ink-2)"></span></div>`:""}
@@ -4909,7 +4963,7 @@ async function riRead(img){
   if(!RI||RI.busy) return; const st=$(img?"#riStatus":"#riStatus2"); let txt="";
   if(img&&!RI.imgs.length) return;
   if(!img){ txt=($("#riText").value||"").trim(); if(!txt){ st.textContent="請先貼上文字"; return; } }
-  RI.busy=true; RI.ctl=new AbortController(); st.textContent=AI.local?"解析中…":"Claude 正在讀取…（約 10–40 秒）";
+  RI.busy=true; RI.ctl=new AbortController(); st.textContent=aiBusyMsg(img);
   const prompt=RET_PROMPT.replace("{REASONS}",reasonsOf("retReasons").join("、"))+`\n\n今天是 ${todayISO()}。`;
   try{
     const out=img?await AI.json(prompt,{images:RI.imgs,signal:RI.ctl.signal}):await AI.json(prompt.replace("你會看到","以下是")+"\n\n=== 退工資料 ===\n"+txt.slice(0,20000),{signal:RI.ctl.signal});
@@ -5039,7 +5093,7 @@ function canonHit(wo){ const reg=derive().reg; if(reg[wo]) return wo; const c=ca
 function normSent(v){ const m=String(v||"").match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})[T\s]*(?:(\d{1,2}):(\d{2}))?/); if(!m) return ""; return m[1]+"-"+m[2].padStart(2,"0")+"-"+m[3].padStart(2,"0")+"T"+(m[4]||"00").padStart(2,"0")+":"+(m[5]||"00"); }
 async function readShots(){
   if(!AH||!AH.imgs.length||AH.busy) return;
-  AH.busy=true; AH.ctl=new AbortController(); $("#ahRead").disabled=true; $("#ahStop").hidden=false; ahStatus("Claude 正在讀取截圖…（約 10–60 秒）");
+  AH.busy=true; AH.ctl=new AbortController(); $("#ahRead").disabled=true; $("#ahStop").hidden=false; ahStatus(aiBusyMsg(true,"10–60"));
   try{
     const out=await AI.json(AI_PROMPT+`\n\n今天是 ${todayISO()}。`,{images:AH.imgs,signal:AH.ctl.signal});
     applyAI(out);
