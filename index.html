@@ -156,6 +156,8 @@ section.blk{margin-top:20px}
 /* table */
 .tbl-wrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px}
 table{border-collapse:collapse;width:100%;min-width:1180px;font-size:13px}
+.srt-th{cursor:pointer;user-select:none}.srt-th:hover{color:var(--ink)}.srt-th[data-sd]::after{content:attr(data-sd);margin-left:3px;font-size:10px}
+.srt-bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:2px 0 6px;font-size:12px;color:var(--ink-3)}.srt-bar button{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:2px 10px;font-size:12px;color:var(--ink-2);cursor:pointer}.srt-bar button.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}
 thead th{position:sticky;top:0;background:var(--panel-2);text-align:left;font-weight:500;color:var(--ink-2);font-size:12px;letter-spacing:.03em;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
 th.sortable{cursor:pointer;user-select:none}
 th.sortable:hover{color:var(--ink)}
@@ -1021,7 +1023,7 @@ body:not(.v-dsp) #secDsp{display:none}
           <th class="sortable" data-k="wo">WO</th>
           <th class="sortable" data-k="tail">機號</th>
           <th>類別</th>
-          <th>工作名稱 / Task ID</th>
+          <th class="sortable" data-k="title">工作名稱 / Task ID</th>
           <th class="sortable" data-k="due">到期日</th>
           <th class="sortable" data-k="sched">排定日期</th>
           <th>計畫備註</th>
@@ -2364,6 +2366,49 @@ async function importInvFile(wb,f){ const r=importInv(wb,f.name); const cats=Obj
   const doc={station:st,file:f.name,at:new Date().toISOString(),by:me&&me.id||"",cats:C,items:[...keep,...r.items]};
   await B.setCap("INV_"+st,doc); B.addLog({kind:st+" 庫存",file:f.name,n:r.items.length,at:doc.at,by:doc.by}); B.audit({act:"外站庫存",to:`${st}：${cats.join("、")}`});
   invalidate(); render(); showMsg(`${st} 庫存已匯入`,`<p>${cats.map(c=>`${esc(c)} ${r.cats[c].n} 項`).join("、")}，${st} 庫存共 ${doc.items.length} 項。</p><p>「${esc(st)}可執行」工單的需帶項目，件號在庫存裡有數量、未過期的，會改列「站上已有」。</p>`); }
+
+/* =====================================================================
+   通用排序：各頁表格點表頭排序（再點一次反向、第三次取消）；今日控管等工單清單上方有「排序」鍵
+   排序方式記在這次開啟的網頁裡，重新繪製後自動套用
+   ===================================================================== */
+const SRT={};
+function srtVal(cell){ if(!cell) return null; const di=cell.querySelector&&cell.querySelector('input[type="date"]'); let t=di?di.value:(cell.innerText||cell.textContent||"").trim();
+  if(!t||/^(N\/A|—|-|–|無|未定|未排)$/i.test(t)) return null;
+  let m=t.match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/); if(m) return [0,`${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`];
+  m=t.match(/(?:^|[^\d\/])(\d{1,2})\/(\d{1,2})(?![\/\d])/); if(m&&+m[1]<=12&&+m[2]<=31){ const T=todayISO(), m0=+T.slice(5,7); let y=+T.slice(0,4), mo=+m[1]; if(mo<m0-6) y++; else if(mo>m0+6) y--; return [0,`${y}-${String(mo).padStart(2,"0")}-${m[2].padStart(2,"0")}`]; }
+  if(/^-?\d+(\.\d+)?$/.test(t.replace(/,/g,""))) return [1,+t.replace(/,/g,"")];
+  return [2,t.toUpperCase()]; }
+function srtCmp(a,b){ if(a==null&&b==null) return 0; if(a==null) return 1; if(b==null) return -1; if(a[0]!==b[0]) return a[0]-b[0]; return a[0]===1?a[1]-b[1]:String(a[1]).localeCompare(String(b[1]),"zh-Hant",{numeric:true}); }
+const srtSkip=tb=>!!(tb.closest("#riTable,#ahTable,#niRows,.fp-t,.kp-t")||tb.querySelector("th.sortable"));
+function srtParts(tb){ const rows=[...tb.rows]; const hi=rows.findIndex(r=>r.querySelector("th")); if(hi<0) return null; const head=rows[hi];
+  const body=rows.slice(hi+1).filter(r=>!r.querySelector("th")); if(body.length<2) return null; const n=head.cells.length;
+  if([...head.cells].some(c=>c.colSpan>1)||body.some(r=>r.cells.length!==n||[...r.cells].some(c=>c.colSpan>1||c.rowSpan>1))) return null; return {head,body}; }
+const srtTKey=tb=>{ const h=tb.closest("[id]"); return "T|"+(h?h.id:"")+"|"+[...(srtParts(tb)||{head:{cells:[]}}).head.cells].map(c=>c.textContent.replace(/[▲▼]/g,"").trim()).join(","); };
+function srtApplyT(tb){ const P=srtParts(tb); if(!P) return; const st=SRT[srtTKey(tb)];
+  [...P.head.cells].forEach((c,i)=>{ if(!c.textContent.trim()) return; c.classList.add("srt-th"); if(st&&st.c===i) c.dataset.sd=st.d>0?"▲":"▼"; else delete c.dataset.sd; });
+  if(!st) return; const par=P.body[0].parentNode; if(P.body.some(r=>r.parentNode!==par)) return;
+  const L=P.body.map((r,i)=>({r,i,v:srtVal(r.cells[st.c])})).sort((a,b)=>{ const x=srtCmp(a.v,b.v); return (a.v==null||b.v==null?x:x*st.d)||a.i-b.i; });
+  if(L.every((o,i)=>o.r===P.body[i])) return; const after=P.body[P.body.length-1].nextSibling; L.forEach(o=>par.insertBefore(o.r,after)); }
+// 工單清單（今日控管各區塊、外站衝突等）
+const SRT_F=[["st","機號"],["sw","WO"],["sc","工作"],["sdue","DUE"],["ssd","排定"]];
+function srtLists(){ const hosts=new Set(); document.querySelectorAll(".dw[data-sx]").forEach(e=>hosts.add(e.parentNode));
+  const ord={};
+  for(const h of hosts){ const items=[...h.children].filter(e=>e.matches(".dw[data-sx]")); if(items.length<2) continue;
+    const host=h.closest("[id]"), hid=host?host.id:"", n=ord[hid]=(ord[hid]||0)+1; const lk=h.dataset.srtk=("L|"+hid+"|"+n), st=SRT[lk];
+    let bar=h.querySelector(":scope>.srt-bar"); if(!bar){ bar=document.createElement("div"); bar.className="srt-bar"; h.insertBefore(bar,items[0]); }
+    const html="排序："+SRT_F.map(([f,l])=>`<button type="button" data-srt="${f}" class="${st&&st.f===f?"on":""}">${l}${st&&st.f===f?(st.d>0?" ▲":" ▼"):""}</button>`).join("");
+    if(bar.innerHTML!==html) bar.innerHTML=html; if(!st) continue;
+    const L=items.map((e,i)=>({e,i,v:(()=>{ const x=e.dataset[st.f]||""; if(!x) return null; return st.f==="sw"&&/^\d+$/.test(x)?[1,+x]:/^\d{4}-\d{2}-\d{2}/.test(x)?[0,x]:[2,x.toUpperCase()]; })()})).sort((a,b)=>{ const x=srtCmp(a.v,b.v); return (a.v==null||b.v==null?x:x*st.d)||a.i-b.i; });
+    if(L.every((o,i)=>o.e===items[i])) continue; const after=items[items.length-1].nextSibling; L.forEach(o=>h.insertBefore(o.e,after)); } }
+let srtBusy=false, srtQ=0;
+function srtAll(){ if(srtBusy) return; srtBusy=true; try{ document.querySelectorAll("table").forEach(tb=>{ if(!srtSkip(tb)) srtApplyT(tb); }); srtLists(); } finally{ srtObs.takeRecords(); srtBusy=false; } }
+const srtObs=new MutationObserver(()=>{ if(srtBusy||srtQ) return; srtQ=requestAnimationFrame(()=>{ srtQ=0; srtAll(); }); });
+srtObs.observe(document.body,{childList:true,subtree:true});
+document.addEventListener("click",e=>{
+  const th=e.target.closest("th.srt-th"); if(th&&!e.target.closest("input,button,select,a")){ const tb=th.closest("table"); const k=srtTKey(tb), i=th.cellIndex, o=SRT[k];
+    SRT[k]=!o||o.c!==i?{c:i,d:1}:o.d>0?{c:i,d:-1}:undefined; if(!SRT[k]) delete SRT[k]; srtAll(); return; }
+  const b=e.target.closest(".srt-bar [data-srt]"); if(b){ const h=b.closest(".srt-bar").parentNode, k=h.dataset.srtk, f=b.dataset.srt, o=SRT[k];
+    SRT[k]=!o||o.f!==f?{f,d:1}:o.d>0?{f,d:-1}:undefined; if(!SRT[k]) delete SRT[k]; srtAll(); } });
 /* ---------- 優先排工: 長工時／指定授權・SKILL／水消、ENG WASH、BSI、AD/SB 先排，修管指定（料到安排）的另列 ---------- */
 const PRI={shop:{t:"修管指定",g:"mx",c:"pri-mx",d:"BATTERY、SLIDE、ELT、ULB 等送修（SHOP／PBTH），修管依料到指定日期"},water:{t:"水消",g:"plan",d:"只能排 日～四，且只能在 TPE 執行（遇紅休、不收水日請詢問修管）"},engwash:{t:"ENG WASH",g:"plan",d:"A330 需在 TPE 地停 13 小時以上（回 TPE 後引擎須冷卻 8 小時才能做）；A321／A359／A351 無此限制"},bsi:{t:"BSI",g:"plan"},sb:{t:"AD／SB",g:"plan"},av:{t:"AV SKILL",g:"plan"},auth:{t:"指定授權",g:"plan"},skill:{t:"指定 SKILL",g:"plan"},long:{t:"長工時",g:"plan"}};
 // planner's card lists (10/16): 水消 and ENG WASH are recognised by MR only
@@ -3426,7 +3471,7 @@ function filtered(all){
   if(ui.status) L=L.filter(w=>(w.vs||w.st)===ui.status);
   if(ui.q){const Q=ui.q.toUpperCase(); L=L.filter(w=>[w.noWo?"無WO 無 WO":w.wo,w.taskId,w.mr,w.title,w.remark,w.note,w.tail,w.serial,w.src,w.sender,w.subject].join(" ").toUpperCase().includes(Q));}
   const f={due:cmpDue,wo:(a,b)=>a.wo<b.wo?-1:1,tail:(a,b)=>a.tail<b.tail?-1:a.tail>b.tail?1:cmpDue(a,b),status:(a,b)=>ST[a.st].o-ST[b.st].o||cmpDue(a,b),
-    sched:(a,b)=>{const x=a.sched||"9999",y=b.sched||"9999"; return x<y?-1:x>y?1:cmpDue(a,b);},done:(a,b)=>(a.doneDate||"0")<(b.doneDate||"0")?-1:1}[ui.sort]||cmpDue;
+    sched:(a,b)=>{const x=a.sched||"9999",y=b.sched||"9999"; return x<y?-1:x>y?1:cmpDue(a,b);},done:(a,b)=>(a.doneDate||"0")<(b.doneDate||"0")?-1:1,title:(a,b)=>String(cardOf(a)||a.title||"").localeCompare(String(cardOf(b)||b.title||""),"en",{numeric:true})||cmpDue(a,b)}[ui.sort]||cmpDue;
   return L.slice().sort((a,b)=>f(a,b)*ui.dir);
 }
 function setSync(cls,txt){const s=$("#sync"); s.className="sync "+cls; s.textContent=txt;}
@@ -3531,7 +3576,7 @@ function dayItem(w,opt){
   const act=ro||w.noWo?"":w.st==="done"?(w.doneManual?`<button class="btn ghost sm" data-mundo="${esc(w.wo)}">取消回報</button>`:"")
     :`<button class="btn sm ok" data-mdone="${esc(w.wo)}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 8.5 3 3 7-7"/></svg>完工</button>${w.sched?`<button class="btn ghost sm" data-ret="${esc(w.wo)}">退工</button>`:""}<button class="btn ghost sm" data-mat="${esc(w.wo)}">${w.wm?"料已到":"待料"}</button><button class="btn ghost sm" data-pz="${esc(w.wo)}">${w.holdR&&w.holdR.wt?"解除暫緩":"暫緩"}</button><button class="btn ghost sm del" data-del="${esc(w.wo)}" title="刪除這張工單（需填原因）">刪除</button>`;
   const dateIn=w.st==="done"?"":`<label class="d-date"><span>${w.sched?"排定":w.auto?"預排":"排入"}</span><input type="date" data-sd="${esc(w.wo)}" value="${w.sched||(w.auto?w.projD:"")}" class="${w.late||w.early?"late":""} ${!w.sched&&w.auto?"auto":""}" ${w.start?`min="${w.start}"`:""} aria-label="排定日期 ${esc(w.wo)}" ${!w.sched&&w.auto?`title="自動預排：上次完工＋週期推算。改日期即改為手動排定"`:""} ${ro?"disabled":""}></label>`;
-  return `<div class="dw st-${w.st}">
+  return `<div class="dw st-${w.st}" data-sw="${esc(w.wo||"")}" data-st="${esc(w.tail||"")}" data-sc="${esc(cardOf(w)+" "+(w.title||""))}" data-sdue="${esc(w.hardD||w.effDue||w.due||"")}" data-ssd="${esc(w.sched||(w.auto?w.projD:"")||"")}"${opt.tail?" data-sx":""}>
     <div class="dw-l"><span class="pill ${w.auto&&w.vs==="sched"?"c-sched":s.c}">${w.auto&&w.vs==="sched"?"自動預排":s.t}</span>${opt.tail?`<span class="mono dw-tail">${esc(w.tail)}</span>`:""}</div>
     <div class="dw-m"><div class="dw-t"><b class="mono">${esc(cardOf(w))}</b>${procOf(w)?`<span class="mini" title="工單內容（Procedure）">Procedure ${esc(procOf(w))}</span>`:""}<span class="t">${esc(w.title||"")}</span></div>
       <div class="dw-s"><button class="wo-link mono dw-wo" data-hist="${esc(w.wo)}" title="查看這張工單的異動歷程">${w.noWo?"無 WO":"WO "+esc(w.wo)}</button>${w.serial&&w.serial!==w.tail?`<span class="mono days">S/N ${esc(w.serial)}</span>`:""}<span class="days ${dl}">${esc(dueTxt(w))}${w.dueBy==="manual"?"（手動）":""}</span>${!w.noWo&&w.st!=="done"&&w.st!=="queue"&&!ro?`<button class="due-ed" data-due="${esc(w.wo)}" title="修改起始日／到期日（FH/FC 變動時）">✎</button>`:""}${w.sched&&opt.showSched?`<span class="days">排定 ${esc(dayLabel(w.sched))}</span>`:""}${w.st==="done"&&w.doneDate?`<span class="days">完工 ${esc(fmtD(w.doneDate).slice(5))}</span>`:""}${tags}<input class="note dw-note" data-nt="${esc(w.wo)}" value="${esc(w.note)}" placeholder="＋ 計畫備註" aria-label="計畫備註 ${esc(w.wo)}" ${ro?"disabled":""}></div></div>
