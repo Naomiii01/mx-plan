@@ -3635,7 +3635,9 @@ function routineList(D){
     const before=[r.it.lastDone,r.last,...evs.map(c=>c.date)].filter(x=>x&&x<D).sort(); /* r.last 也含手動回報完工、卡號比對的 WO（與短天期清單一致） */ const prevM=(day.rt||{})[k]&&(day.rt||{})[k].prev;
     const last=prevM&&prevM<D?prevM:(before.length?before[before.length-1]:"");
     const nw=!r.it.routine;
-    if(nw&&ev&&derive().reg[ev.wo]) return {show:false}; // done under a planned WO: that WO's own row already shows it
+    if(nw&&ev&&derive().reg[ev.wo]) return {show:false};
+    // 當天用月計畫／臨時的 WO 完工（含手動回報完工）：那張 WO 自己那列已經顯示，這列不再重複
+    if(nw&&r.last===D&&r.lastVia==="wo") return {show:false}; // done under a planned WO: that WO's own row already shows it
     // …or a planned WO of this card was matched to the same completion (卡號比對完工) — one execution, one row
     if(nw&&ev&&derive().all.some(w=>w.tail===r.tail&&w.st==="done"&&(w.doneSrcWo===ev.wo||w.doneDate===D)&&(cardOf(w).toUpperCase()===T_||String(w.taskId||"").trim().toUpperCase()===T_))) return {show:false};
     const cyc=nw?(r.byInt?+r.it.limitDays:+r.it.cycle):(+r.it.cycle||1), lim=+r.it.limitDays||0;
