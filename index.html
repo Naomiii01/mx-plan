@@ -3632,7 +3632,7 @@ function routineList(D){
     const evs=(derive().cardDone[r.tail+"|"+T_]||[]); const ev=evs.find(c=>c.date===D);
     const mark=ev?{by:"",at:"",file:ev.file,wo:ev.wo,ev:true}:(day.rt||{})[k]||null;
     // last execution before D: stored last-done, completion lines and confirmations — anything on or after D does not count for D
-    const before=[r.it.lastDone,...evs.map(c=>c.date)].filter(x=>x&&x<D).sort(); const prevM=(day.rt||{})[k]&&(day.rt||{})[k].prev;
+    const before=[r.it.lastDone,r.last,...evs.map(c=>c.date)].filter(x=>x&&x<D).sort();   // r.last 也含手動回報完工、卡號比對的 WO（與短天期清單一致） const prevM=(day.rt||{})[k]&&(day.rt||{})[k].prev;
     const last=prevM&&prevM<D?prevM:(before.length?before[before.length-1]:"");
     const nw=!r.it.routine;
     if(nw&&ev&&derive().reg[ev.wo]) return {show:false}; // done under a planned WO: that WO's own row already shows it
