@@ -4783,15 +4783,28 @@ const LX=(()=>{
       const rg=body.match(/([A-Z]{3}\/\d{1,2}(?:\/\d{4})?|\d{4}\/\d{1,2}\/\d{1,2}|\d{1,2}\/\d{1,2})\s*[~～\-至到]\s*([A-Z]{3}\/\d{1,2}(?:\/\d{4})?|\d{4}\/\d{1,2}\/\d{1,2}|\d{1,2}\/\d{1,2}(?:\/\d{4})?)/i);
       if(rg){ const a=dates(rg[0],y); if(a.length>=2){ start=a[0].d; due=a[1].d; } }
       if(!due){ const k=D.find(x=>/前|之前|BEFORE|屆期|DUE|到期/i.test(body.slice(x.end,x.end+8)+body.slice(Math.max(0,x.i-10),x.i))); if(k) due=k.d; }
+      const D_due=due;
       // table rows (tab-separated, from Outlook): find the header row
       let hi=lines.findIndex(l=>l.includes("\t")&&/\b(WO|TRX|WORK ?ORDER)\b|工單/i.test(l));
       const got=[];
-      if(hi>=0){ const H=lines[hi].split("\t").map(c=>c.trim().toLowerCase()); const f=(res)=>H.findIndex(h=>res.some(r=>r.test(h)));
-        const ci={tail:f([/^serial$/,/機號/,/^tail/,/^a\/c/,/^reg/]),wo:f([/^wo\b/,/^trx$/,/work ?order/,/工單/]),mr:f([/^mr$/,/^mr\//,/task ?card/,/task id/,/卡號/,/^eo$/]),title:f([/title/,/description/,/工作名稱/]),pkg:f([/package/,/pkg id/]),ptype:f([/task type/]),due:f([/due/,/到期/]),per:f([/schedule period/,/period/])};
-        for(const l of lines.slice(hi+1)){ if(!l.includes("\t")) { if(got.length) break; else continue; } const c=l.split("\t").map(x=>x.trim());
-          const wo=(ci.wo>=0?c[ci.wo]:"").match(/\d{6,8}/); if(!wo) continue; let tail=tailOf(ci.tail>=0?c[ci.tail]:l)||tailOf(l);
-          const dd=ci.due>=0?(dates(c[ci.due]||"",y)[0]||{}).d||"":"";
-          got.push({wo:wo[0],tail,mr:ci.mr>=0?c[ci.mr]:"",title:ci.title>=0?c[ci.title]:"",pkgId:ci.pkg>=0?c[ci.pkg]:"",pkgType:ci.ptype>=0?c[ci.ptype]:"",start,due:dd||due,remark:ci.per>=0&&c[ci.per]?`Schedule Period ${c[ci.per]}`:"",action:"add",...meta}); } }
+      if(hi>=0){ const H=lines[hi].split("\t").map(c=>c.trim().toLowerCase()); const n=H.length; const f=(res)=>H.findIndex(h=>res.some(r=>r.test(h)));
+        const ci={tail:f([/^serial$/,/機號/,/^tail/,/^a\/c/,/^reg/]),wo:f([/^wo\b/,/^trx$/,/work ?order/,/工單/]),mr:f([/^mr$/,/^mr\//,/task ?card/,/task id/,/卡號/,/^eo$/]),title:f([/title/,/description/,/工作名稱/]),pkg:f([/package/,/pkg id/]),ptype:f([/task type/]),due:f([/due/,/到期/]),per:f([/schedule period/,/period/]),part:f([/task part/]),cfg:f([/config/]),note:f([/^note/,/備註/,/^remark/,/^action/,/說明/])};
+        // 組回每一列：儲存格內換行（例如 NOTE「只更換序號…」下一行「599886 OFF / 59A572 ON」）接回同一格
+        const R_=[]; let cur=null; const nextTab=i=>{ for(let j=i+1;j<lines.length;j++){ if(lines[j].trim()) return lines[j].includes("\t"); } return false; };
+        for(let i=hi+1;i<lines.length;i++){ const l=lines[i];
+          if(l.includes("\t")){ const c=l.split("\t"); if(cur&&cur.length<n){ cur[cur.length-1]+=" "+c[0]; cur.push(...c.slice(1)); } else { cur=c; R_.push(cur); } continue; }
+          if(!l.trim()) continue;
+          if(cur&&(nextTab(i)||/\bOFF\b.*\bON\b|[A-Z]{3}\/\d{1,2}\/\d{4}/i.test(l))){ cur[cur.length-1]+=" "+l.trim(); continue; }
+          if(R_.length) break; }
+        for(const c0 of R_){ const c=c0.map(x=>String(x||"").trim()); const g=k=>ci[k]>=0?(c[ci[k]]||""):"";
+          const wo=(g("wo").match(/\d{6,8}/)||[""])[0], note=g("note"), mr=g("mr"), cfg=g("cfg");
+          let tail=tailOf(ci.tail>=0?g("tail"):c.join(" "))||tailOf(c.join(" "))||tailOf(body)||tailOf(M_.subject);
+          let action="add", serial="", serialOld="", due=(ci.due>=0?((dates(g("due"),y)[0]||{}).d||""):"")||D_due;
+          if(/CANCEL|取消|刪除|作廢/i.test(note)) action="cancel";
+          else { const so=note.match(/([A-Z0-9]{5,})\s*OFF\s*[\/／,，]?\s*([A-Z0-9]{5,})\s*ON/i); if(so||/更換序號|換序號|序號更換/.test(note)){ action="serial"; if(so){ serialOld=so[1].toUpperCase(); serial=so[2].toUpperCase(); } }
+            const nd=(dates(note,y)[0]||{}).d; if(nd&&action==="add") due=nd; }
+          if(!wo&&!(action==="cancel"&&mr)) continue;
+          got.push({wo,tail,mr,title:g("title"),pkgId:g("pkg"),pkgType:g("ptype"),part:g("part"),config:cfg,serial,serialOld,start:action==="add"&&!/\d/.test(note)?start:"",due:action==="add"?due:"",remark:[note,ci.per>=0&&g("per")?`Schedule Period ${g("per")}`:""].filter(Boolean).join("；").slice(0,120),action,...meta}); } }
       // free text: every WO number in the mail
       if(!got.length){ const seen=new Set(); let m; WO_RE.lastIndex=0;
         const nums=[]; while((m=WO_RE.exec(body))) nums.push({wo:m[1],i:m.index});
@@ -5134,8 +5147,9 @@ function syncRows(){
 }
 function drawRows(){
   const reg=derive().reg;
-  $("#ahTable").innerHTML=`<table style="min-width:1100px"><tr>${AH_FIELDS.map(f=>`<th>${f[1]}</th>`).join("")}<th></th></tr>${AH.rows.map((r,i)=>`<tr data-i="${i}">${AH_FIELDS.map(([k,lb,w])=>k==="action"?`<td data-l="${esc(lb)}"><select data-f="action" style="width:${w}px;border:1px solid var(--line);background:var(--panel);border-radius:4px;padding:3px 4px;font-size:12.5px;${r.action==="cancel"?"color:var(--red);font-weight:600":""}"><option value="add" ${r.action!=="cancel"?"selected":""}>新增</option><option value="cancel" ${r.action==="cancel"?"selected":""}>取消</option></select></td>`:`<td data-l="${esc(lb)}"><input data-f="${k}" ${k==="start"||k==="due"?'type="date"':""} value="${esc(r[k]||"")}" style="width:${w}px;border:1px solid var(--line);background:var(--panel);border-radius:4px;padding:3px 6px;font-size:12.5px;${k==="wo"||k==="tail"?"font-family:var(--mono)":""}" aria-label="${k} 第 ${i+1} 列"></td>`).join("")}<td><button class="btn ghost" data-del="${i}" aria-label="刪除第 ${i+1} 列" style="padding:2px 8px">×</button></td></tr>${r.action==="cancel"?`<tr><td colspan="11" style="font-size:12px;color:${r.wo&&reg[canonHit(r.wo)]?"var(--red)":"var(--amber)"}">${r.wo&&reg[canonHit(r.wo)]?`取消：WO ${esc(r.wo)}（${esc(reg[canonHit(r.wo)].tail)}，${esc((reg[canonHit(r.wo)].title||"").slice(0,40))}）會從管控清單移除，並記錄原因與通知人。`:`管控表中找不到 WO ${esc(r.wo)}，無需取消。`}</td></tr>`:r.wo&&reg[r.wo]?`<tr><td colspan="11" style="font-size:12px;color:var(--amber)">WO ${esc(r.wo)} 已在${reg[r.wo].adhoc?"臨時工單":"月計畫（"+esc(reg[r.wo].month)+"）"}中，加入後會標示為臨時通知。</td></tr>`:""}${r.replaces&&r.action!=="cancel"?`<tr><td colspan="11" style="font-size:12px;color:var(--ink-2)">取代舊工單 ${esc(r.replaces)}${reg[canonHit(r.replaces)]?"：舊工單會移除，排定日期與備註轉到新工單":"（管控表中找不到舊工單）"}</td></tr>`:""}`).join("")}</table>`;
+  $("#ahTable").innerHTML=`<table style="min-width:1100px"><tr>${AH_FIELDS.map(f=>`<th>${f[1]}</th>`).join("")}<th></th></tr>${AH.rows.map((r,i)=>`<tr data-i="${i}">${AH_FIELDS.map(([k,lb,w])=>k==="action"?`<td data-l="${esc(lb)}"><select data-f="action" style="width:${w}px;border:1px solid var(--line);background:var(--panel);border-radius:4px;padding:3px 4px;font-size:12.5px;${r.action==="cancel"?"color:var(--red);font-weight:600":r.action==="serial"?"color:var(--accent);font-weight:600":""}"><option value="add" ${r.action!=="cancel"&&r.action!=="serial"?"selected":""}>新增</option><option value="serial" ${r.action==="serial"?"selected":""}>改序號</option><option value="cancel" ${r.action==="cancel"?"selected":""}>取消</option></select></td>`:`<td data-l="${esc(lb)}"><input data-f="${k}" ${k==="start"||k==="due"?'type="date"':""} value="${esc(r[k]||"")}" style="width:${w}px;border:1px solid var(--line);background:var(--panel);border-radius:4px;padding:3px 6px;font-size:12.5px;${k==="wo"||k==="tail"?"font-family:var(--mono)":""}" aria-label="${k} 第 ${i+1} 列"></td>`).join("")}<td><button class="btn ghost" data-del="${i}" aria-label="刪除第 ${i+1} 列" style="padding:2px 8px">×</button></td></tr>${r.action==="serial"?`<tr data-i="${i}" class="ah-sub"><td colspan="11" style="font-size:12px;color:var(--accent)">${(()=>{ const w=reg[canonHit(r.wo)]; if(!w) return `管控表中找不到 WO ${esc(r.wo)}，無法改序號。`; return `改序號：WO ${esc(r.wo)}（${esc(w.tail)}，${esc(cardOf(w))}）S/N ${esc(r.serialOld||w.serial||"?")} → <b>${esc(r.serial||"（請填新序號）")}</b>，排定日期不變；同機同卡號、原序號的短天期一併改成新序號。`; })()} 新序號：<input data-f="serial" value="${esc(r.serial||"")}" style="width:110px;border:1px solid var(--line);border-radius:4px;padding:2px 6px;font-family:var(--mono)"></td></tr>`:""}${r.action==="cancel"&&!r.wo?`<tr><td colspan="11" style="font-size:12px;color:var(--red)">${(()=>{ const L=ahCardHits(r); return L.length?`取消：${esc(r.tail)} ${esc(r.mr)}${r.config?" "+esc(r.config):""} 的 WO ${esc(L.map(w=>w.wo).join("、"))} 會從管控清單移除。`:`管控表中 ${esc(r.tail)} ${esc(r.mr)}${r.config?"（"+esc(r.config)+"）":""} 沒有未刪除的 WO（可能已刪除），無需取消。`; })()}</td></tr>`:""}${r.action==="cancel"&&r.wo?`<tr><td colspan="11" style="font-size:12px;color:${r.wo&&reg[canonHit(r.wo)]?"var(--red)":"var(--amber)"}">${r.wo&&reg[canonHit(r.wo)]?`取消：WO ${esc(r.wo)}（${esc(reg[canonHit(r.wo)].tail)}，${esc((reg[canonHit(r.wo)].title||"").slice(0,40))}）會從管控清單移除，並記錄原因與通知人。`:`管控表中找不到 WO ${esc(r.wo)}，無需取消。`}</td></tr>`:r.wo&&reg[r.wo]&&r.action!=="serial"?`<tr><td colspan="11" style="font-size:12px;color:var(--amber)">WO ${esc(r.wo)} 已在${reg[r.wo].adhoc?"臨時工單":"月計畫（"+esc(reg[r.wo].month)+"）"}中，加入後會標示為臨時通知。</td></tr>`:""}${r.replaces&&r.action!=="cancel"?`<tr><td colspan="11" style="font-size:12px;color:var(--ink-2)">取代舊工單 ${esc(r.replaces)}${reg[canonHit(r.replaces)]?"：舊工單會移除，排定日期與備註轉到新工單":"（管控表中找不到舊工單）"}</td></tr>`:""}`).join("")}</table>`;
   $("#ahTable").querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{ syncRows(); AH.rows.splice(+b.dataset.del,1); if(!AH.rows.length) AH.rows.push({}); drawRows(); });
+  $("#ahTable").querySelectorAll('select[data-f="action"],input[data-f="wo"]').forEach(x=>x.onchange=()=>{ syncRows(); drawRows(); });
   const s=$("#ahSrc"); if(s&&AH.src&&!s.value) s.value=AH.src;
   const f=$("#ahFrom"); if(f&&AH.from&&!f.value) f.value=AH.from; const t=$("#ahSent"); if(t&&AH.sent&&!t.value) t.value=AH.sent;
 }
@@ -5164,7 +5178,7 @@ async function readText(){
 }
 function applyAI(out){
   const rows=(out&&Array.isArray(out.rows)?out.rows:[]).map(r=>{ const x={}; for(const [k] of AH_FIELDS) x[k]=String(r[k]??"").trim(); x.serial=String(r.serial??"").trim(); x.part=String(r.part??"").trim();
-    x.action=String(r.action||"add").toLowerCase()==="cancel"?"cancel":"add"; x.replaces=normWO(r.replaces||"");
+    { const a_=String(r.action||"add").toLowerCase(); x.action=a_==="cancel"?"cancel":a_==="serial"?"serial":"add"; } x.replaces=normWO(r.replaces||""); x.config=String(r.config||"").trim(); x.serialOld=String(r.serialOld||"").trim();
     x.from=String(r.from||out.from||"").trim(); x.sentAt=normSent(r.sentAt||out.sentAt); x.subject=String(r.subject||out.subject||"").trim();
     x.wo=normWO(x.wo).replace(/[^0-9A-Z\-]/g,""); const t=x.tail.toUpperCase().match(/B-?\d{5}/); x.tail=t?(t[0].includes("-")?t[0]:t[0].replace("B","B-")):x.tail.toUpperCase();
     x.start=parseDate(x.start)||""; x.due=parseDate(x.due)||""; return x; }).filter(x=>x.wo||x.tail);
@@ -5175,13 +5189,17 @@ function applyAI(out){
   const miss=rows.some(r=>!r.from&&!AH.from)||rows.some(r=>!r.sentAt&&!AH.sent);
   $("#ahMetaHint").innerHTML=miss?`<div class="banner" style="margin:0"><span>貼上的內容沒有寄件人或發信時間。請在 Outlook 按「轉寄」後，全選複製轉寄畫面再貼一次；或直接在上方填寫。</span></div>`:"";
 }
+// 沒有 WO 的取消：用機號＋卡號（＋引擎位置 CFM-L／CFM-R）找未刪除、未完工的 WO
+function ahCardHits(r){ const T=String(r.mr||"").trim().toUpperCase(), t=String(r.tail||"").toUpperCase(); if(!T||!t) return [];
+  const pos=enginePos({config:r.config||""}); return derive().all.filter(w=>w.tail===t&&!w.removed&&w.st!=="done"&&!w.noWo&&(taskKeys(w).includes(T)||cardOf(w).toUpperCase()===T)&&(!pos||enginePos(w)==null||enginePos(w)===pos)); }
 async function saveAdhoc(){
   syncRows(); const allRows=AH.rows.filter(r=>Object.entries(r).some(([k,v])=>k!=="action"&&v));
-  const cancels=allRows.filter(r=>r.action==="cancel"), rows=allRows.filter(r=>r.action!=="cancel");
+  const cancels=allRows.filter(r=>r.action==="cancel"), serials=allRows.filter(r=>r.action==="serial"), rows=allRows.filter(r=>r.action!=="cancel"&&r.action!=="serial");
+  { const sb=serials.filter(r=>!r.wo||!r.serial||!derive().reg[canonHit(r.wo)]); if(sb.length){ $("#ahWarn").innerHTML=`<p style="color:var(--red);font-size:13px">改序號的列需要管控表中已有的 WO 和新序號（${esc(sb.map(r=>r.wo||r.mr).join("、"))}）。</p>`; return; } }
   const bad=rows.filter(r=>!r.wo||!/^B-\d{5}$/.test((r.tail||"").toUpperCase()));
   const noMeta=rows.some(r=>!(r.from||AH.from).trim());
   if(noMeta&&!AH.metaWarned){ AH.metaWarned=true; $("#ahWarn").innerHTML=`<p style="color:var(--amber);font-size:13px">還沒有寄件人。建議補上，日後才查得到是誰通知的。再按一次「加入管控表」可直接加入。</p>`; return; }
-  if((!rows.length&&!cancels.length)||bad.length){ $("#ahWarn").innerHTML=`<p style="color:var(--red);font-size:13px">${rows.length||cancels.length?`有 ${bad.length} 列缺少 WO，或機號不是 B-12345 格式。`:"請至少輸入一筆工單。"}</p>`; return; }
+  if((!rows.length&&!cancels.length&&!serials.length)||bad.length){ $("#ahWarn").innerHTML=`<p style="color:var(--red);font-size:13px">${rows.length||cancels.length?`有 ${bad.length} 列缺少 WO，或機號不是 B-12345 格式。`:"請至少輸入一筆工單。"}</p>`; return; }
   const R=roster(); const unknown=rows.filter(r=>!R.byTail[r.tail.toUpperCase()]).map(r=>r.tail);
   const now=new Date().toISOString(), by=me&&me.id||"", src=AH.src.trim();
   const byMonth={};
@@ -5203,16 +5221,23 @@ async function saveAdhoc(){
       const patch={removed:true,missing:false,rmBy:by,rmAt:now,rmReason:reason};
       if(w.adhoc) await B.patchAdhoc(w.aMonth,k,patch); else await B.patchPlanWo(w.pid,k,patch);
       B.audit({act:"信件取消工單",wo:k,tail:w.tail,to:reason,file:src}); return true; };
-    AH.cancelled=[]; AH.replaced=[];
-    for(const r of cancels) if(await removeWo(r.wo,`信件通知取消（${who_}）${r.remark?"："+r.remark:""}`)) AH.cancelled.push(r.wo);
+    AH.cancelled=[]; AH.replaced=[]; AH.serialed=[]; AH.noHit=[];
+    for(const r of cancels){ const L=r.wo?[r.wo]:ahCardHits(r).map(w=>w.wo); if(!L.length) AH.noHit.push(`${r.tail} ${r.mr}`);
+      for(const wo of L) if(await removeWo(wo,`信件通知取消（${who_}）${r.remark?"："+r.remark:""}`)) AH.cancelled.push(wo); }
+    // 改序號：WO 的 S/N 換成新序號（照原定時間發工），同機同卡號、原序號的短天期一起改
+    for(const r of serials){ const k=canonHit(r.wo), w=derive().reg[k]; if(!w) continue; const old=String(r.serialOld||w.serial||"").toUpperCase(), nu=String(r.serial).trim().toUpperCase();
+      const patch={serial:nu,serialWas:w.serial||"",serialAt:now,serialBy:by,serialNote:`信件改序號（${who_}）${old} OFF / ${nu} ON`};
+      if(w.adhoc) await B.patchAdhoc(w.aMonth,k,patch); else await B.patchPlanWo(w.pid,k,patch);
+      const sd=M.short[safeKey(w.tail)]; let sn=0; if(sd&&old) for(const [key,it] of Object.entries(sd.items||{})){ const [s0,p0]=String(it.serial||"").split("#"); if(String(it.task||"").toUpperCase()===cardOf(w).toUpperCase()&&s0.trim().toUpperCase()===old){ await B.patchShort(w.tail,key,{serial:nu+(p0?"#"+p0:""),serialWas:it.serial}); sn++; } }
+      B.audit({act:"信件改序號",wo:k,tail:w.tail,to:`${old} → ${nu}${sn?`（短天期 ${sn} 項一併更新）`:""}`,file:src}); AH.serialed.push(`${k} ${old}→${nu}${sn?`（短天期 ${sn} 項）`:""}`); }
     for(const r of rows) if(r.replaces){ const old=canonHit(r.replaces); const sc=((M.sched[shardOf(old)]||{}).e||{})[old];
       if(await removeWo(old,`由 ${normWO(r.wo)} 取代（${who_}）`)){ AH.replaced.push(old+"→"+normWO(r.wo)); if(sc&&(sc.d||sc.n)) await B.setSched(normWO(r.wo),{d:sc.d||"",n:[sc.n,"原工單 "+old].filter(Boolean).join(" / "),by,at:now}); } }
     await B.addLog({kind:"臨時工單",file:src||"手動輸入",at:now,by,n:rows.length+cancels.length});
     for(const r of rows) B.audit({act:"新增臨時工單",wo:normWO(r.wo),tail:r.tail.toUpperCase(),to:[r.mr,r.title].filter(Boolean).join(" ").slice(0,80),file:src,at:now});
   }catch(e){ $("#ahSave").disabled=false; return; }
-  const done_={cancelled:AH.cancelled||[],replaced:AH.replaced||[]};
+  const done_={cancelled:AH.cancelled||[],replaced:AH.replaced||[],serialed:AH.serialed||[],noHit:AH.noHit||[]};
   AH=null; closeDlg(); invalidate(); render();
-  showMsg("已更新管控表",`<ul>${rows.length?`<li>新增 ${rows.length} 筆：${esc(rows.map(r=>r.wo+"（"+r.tail+"）").join("、"))}</li>`:""}${done_.cancelled.length?`<li style="color:var(--red)">取消 ${done_.cancelled.length} 筆：${esc(done_.cancelled.join("、"))}</li>`:""}${done_.replaced.length?`<li>取代：${esc(done_.replaced.join("、"))}（排定日期與備註已轉到新工單）</li>`:""}${unknown.length?`<li style="color:var(--amber)">不在機隊名冊中的機號：${esc(unknown.join("、"))}</li>`:""}<li>可在工單明細用「來源：臨時加工」篩選。</li>${(()=>{const R2=derive().resolved; const n=Object.values(R2).filter(v=>rows.some(r=>normWO(r.wo)===v)).length; return n?`<li style="color:var(--green)">其中 ${n} 張對上月計畫中原本「無 WO」的工作，已自動轉為一般工單。</li>`:"";})()}</ul>`);
+  showMsg("已更新管控表",`<ul>${rows.length?`<li>新增 ${rows.length} 筆：${esc(rows.map(r=>r.wo+"（"+r.tail+"）").join("、"))}</li>`:""}${done_.cancelled.length?`<li style="color:var(--red)">取消 ${done_.cancelled.length} 筆：${esc(done_.cancelled.join("、"))}</li>`:""}${done_.serialed.length?`<li>改序號：${esc(done_.serialed.join("、"))}</li>`:""}${done_.noHit.length?`<li class="muted">已無未刪除的 WO、不需取消：${esc(done_.noHit.join("、"))}</li>`:""}${done_.replaced.length?`<li>取代：${esc(done_.replaced.join("、"))}（排定日期與備註已轉到新工單）</li>`:""}${unknown.length?`<li style="color:var(--amber)">不在機隊名冊中的機號：${esc(unknown.join("、"))}</li>`:""}<li>可在工單明細用「來源：臨時加工」篩選。</li>${(()=>{const R2=derive().resolved; const n=Object.values(R2).filter(v=>rows.some(r=>normWO(r.wo)===v)).length; return n?`<li style="color:var(--green)">其中 ${n} 張對上月計畫中原本「無 WO」的工作，已自動轉為一般工單。</li>`:"";})()}</ul>`);
 }
 document.addEventListener("paste",e=>{
   if(!AH) return; const files=[...(e.clipboardData&&e.clipboardData.files||[])].filter(f=>f.type.startsWith("image/"));
