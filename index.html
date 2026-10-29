@@ -1622,7 +1622,7 @@ const PLAN_COLS={
   pkgType:["PKG TASK TYPE","TASK TYPE","類別"],
   taskId:["TASK ID"], pkgId:["PKG ID","PACKAGE ID"], serial:["TASK SERIAL","SERIAL"],
   config:["CONFIG ADDRESS"], part:["TASK PART"], mr:["MR/DEFERRAL","MR"], period:["MR PERIOD"],
-  title:["TASK TITLE","TITLE","DESCRIPTION","工作名稱","工作內容"],
+  title:["TASK TITLE","TITLE","DESCRIPTION","工作名稱","工作內容","MR/DEFER/WO TITLE","WO TITLE"],
   remark:["REMARK","REMARKS","備註","NOTE","NOTES"], longHr:["長工時"],
   tail:["機號","TAIL","A/C","A/C REG","REG","AIRCRAFT"], type:["機型","A/C TYPE","FLEET"],
   sched:["排定日期"], note:["計畫備註"], srcKind:["來源"], start:["可執行起日"], srcNote:["來源說明","主旨"], sender:["寄件人"], sentAt:["發信時間"], doneD:["完工日期"], removed:["已確認移除"], status:["狀態"], monthC:["計畫月份"], file:["來源檔案"]
@@ -1631,7 +1631,7 @@ function findHeader(rows,need){ for(let i=0;i<Math.min(rows.length,15);i++){ con
 function mapCols(H,def){ const m={}, N=H.map(normH); for(const k in def){const idx=N.findIndex(h=>def[k].includes(h)); if(idx>=0) m[k]=idx;} return m; }
 function tailFrom(r,m){
   for(const c of [m.tail!=null?r[m.tail]:null,m.pkgId!=null?r[m.pkgId]:null,m.serial!=null?r[m.serial]:null]){
-    if(!c) continue; const x=String(c).toUpperCase().match(/B-?\d{5}/); if(x) return x[0].includes("-")?x[0]:x[0].replace("B","B-");
+    if(!c) continue; const x=String(c).toUpperCase().match(/(?:^|[^A-Z0-9])(B-?\d{5})(?!\d)/); if(x) return x[1].includes("-")?x[1]:x[1].replace("B","B-");   // B168318（氧氣面罩序號）不是機號
   }
   return "";
 }
@@ -1658,24 +1658,25 @@ function classify(wb){
 async function importPlan(wb,fileName){
   const fileMonth=monthFromName(fileName), hintType=typeFromName(fileName);
   const now=new Date().toISOString(), by=me&&me.id||"";
-  const seen=new Set(), dup=[]; let skipped=0, noWoN=0; const groups={};
+  const seen=new Set(), dup=[]; let skipped=0, noWoN=0, perTail=0; const groups={};
   for(const sn of wb.SheetNames){
     const rows=sheetRows(wb.Sheets[sn]); const hi=findHeader(rows,PLAN_COLS.wo); if(hi<0) continue;
-    const m=mapCols(rows[hi],PLAN_COLS);
+    const m=mapCols(rows[hi],PLAN_COLS); const snT=String(sn).toUpperCase().match(/^\s*(B-?\d{5})\s*$/), snTail=snT?(snT[1].includes("-")?snT[1]:snT[1].replace("B","B-")):"";
+    if(snTail&&m.pkgId==null) perTail++;
     for(let i=hi+1;i<rows.length;i++){
       const r=rows[i]; if(!r) continue;
       const g=k=>m[k]!=null&&r[m[k]]!=null?String(r[m[k]]).trim():"";
       let wo=normWO(r[m.wo]); let noWo=false;
       if(!wo){
         if(!r.some(v=>v!=null&&v!=="")) continue;
-        const t0=tailFrom(r,m), ident=g("taskId")||g("mr")||g("title").slice(0,40);
+        const t0=tailFrom(r,m)||snTail, ident=g("taskId")||g("mr")||g("title").slice(0,40);
         if(!t0||!ident){ skipped++; continue; }
         const ser=g("serial"); let k="NOWO-"+safeKey(t0)+"-"+safeKey(ident)+(ser&&ser.toUpperCase()!==t0?"-"+safeKey(ser):"");
         k=k.slice(0,180); if(seen.has(k)){ let n2=2; while(seen.has(k+"-"+n2)&&n2<99) n2++; k=k+"-"+n2; }
         wo=k; noWo=true; noWoN++;
       }
       if(seen.has(wo)){dup.push(wo); continue;} seen.add(wo);
-      const tail=tailFrom(r,m)||"未知機號";
+      const tail=tailFrom(r,m)||snTail||"未知機號";
       const pkgId=g("pkgId"); const month=monthFromPkg(pkgId)||fileMonth||todayISO().slice(0,7);
       const type=g("type")||typeOf(tail,hintType);
       const dueRaw=m.due!=null?r[m.due]:null; const rg=parseRange(dueRaw); const due=rg.end;
@@ -1690,9 +1691,10 @@ async function importPlan(wb,fileName){
   if(!seen.size) return {ok:false,msg:"找不到工單列。請確認檔案有「WO」欄位標題。"};
   // month-end carry-over list from 修管 (last month's open WOs moved into this month): add only, never flag anything missing
   const curMo=todayISO().slice(0,7), pastOnly=Object.values(groups).every(G=>G.month<curMo);
-  if(/未完工|轉入|CARRY|TASK.?LIST/i.test(fileName)||pastOnly){
+  const carryLike=/未完工|轉入|CARRY|TRANSFER|TASK.?LIST/i.test(fileName)||perTail>=2;   // 每架一張工作表、沒有 Pkg ID 欄：修管的未完工轉入清單
+  if(carryLike||pastOnly){
     const k=await choiceDlg("這份檔案是哪一種？",`<p>${esc(fileName)}：${Object.keys(groups).length} 架、${seen.size} 張，計畫月份 ${esc([...new Set(Object.values(groups).map(G=>G.month))].join("、"))}。</p>`,
-      [["carry","未完工轉入清單","修管月底整理的上月未完工工單。只新增管控表沒有的 WO，已有的不重複、不改動；其他工單不會被判為消失。"],["plan","月計畫工作包","以這份檔案為準比對，檔案中沒有的工單會標為「檔案中消失」。"]],pastOnly||/未完工|轉入/.test(fileName)?"carry":"plan");
+      [["carry","未完工轉入清單","修管月底整理的上月未完工工單。新增管控表沒有的 WO；已有的不重複加入，但 DUE 不同時依清單更新（保留原 DUE 紀錄）；其他工單不會被判為消失。"],["plan","月計畫工作包","以這份檔案為準比對，檔案中沒有的工單會標為「檔案中消失」。"]],pastOnly||carryLike?"carry":"plan");
     if(k==="carry") return importCarry(groups,fileName,now,by,seen.size,dup);
   }
   // scope = every (type, month) in this file. Plans already stored for that type+month
@@ -1748,12 +1750,18 @@ async function importPlan(wb,fileName){
 }
 
 async function importCarry(groups,fileName,now,by,n,dup){
-  const reg=derive().reg, doneMap=derive().doneMap; const added=[], existed=[], doneAlready=[]; const schedIn=[];
+  const reg=derive().reg, doneMap=derive().doneMap; const added=[], existed=[], doneAlready=[]; const schedIn=[], dueUpd=[], doneListed=[], duePatch=[];
   for(const [pid,G] of Object.entries(groups)){
     const cur=M.plans[pid]; const wos={...((cur&&cur.wos)||{})}; let n0=0;
     for(const [wo,w] of Object.entries(G.wos)){
       const hit=reg[wo]?wo:Object.keys(reg).find(k=>canonWO(k)===canonWO(wo));
-      if(hit){ existed.push(wo); continue; }
+      if(hit){ existed.push(wo); const ex=reg[hit]||{};
+        if(doneMap[hit]) doneListed.push([hit,ex.tail,cardOf(ex),doneMap[hit].date||""]);
+        // 修管轉入清單的 DUE 為準：日期不同就更新（區間的起日也一起），原 DUE 記在 dueWas
+        const nd=w.due||"", ns=w.start||"";
+        if(nd&&(nd!==(ex.due||"")||(ns&&ns!==(ex.start||"")))){ const patch={due:nd,dueWas:ex.due||"",dueAt:now,dueFile:fileName}; if(ns) patch.start=ns; if(w.dueRaw) patch.dueRaw=w.dueRaw;
+          dueUpd.push([hit,ex.tail,cardOf(ex),ex.due||"",nd]); duePatch.push([hit,patch]); }
+        continue; }
       if(doneMap[wo]) doneAlready.push(wo);
       const w2={...w,remark:[w.remark,"月底未完工轉入"].filter(Boolean).join(" / ")};
       const m=String(w.dueRaw||"").match(/預排\s*(\d{1,2})\/(\d{1,2})/); if(m){ const y=+curMoY(); schedIn.push([wo,y+"-"+m[1].padStart(2,"0")+"-"+m[2].padStart(2,"0")]); }
@@ -1761,9 +1769,15 @@ async function importCarry(groups,fileName,now,by,n,dup){
     }
     if(n0) await B.setPlan(pid,{month:G.month,tail:G.tail,type:G.type,file:cur?cur.file:fileName,at:now,by,wos,carryFile:fileName});
   }
+  // DUE 更新放在新增之後：同一架有新增工單時，上面的 setPlan 會整份寫入，先改的 DUE 會被蓋掉
+  for(const [hit,patch] of duePatch){
+    for(const [pid2,P] of Object.entries(M.plans||{})) if(P&&P.wos&&P.wos[hit]) await B.patchPlanWo(pid2,hit,patch);
+    for(const [aid,A] of Object.entries(M.adhoc||{})) if(A&&A.items&&A.items[hit]) await B.patchAdhoc(A.month||aid,hit,patch); }
   for(const [wo,d] of schedIn){ const e=((M.sched[shardOf(wo)]||{}).e||{})[wo]; if(!e||!e.d) await B.setSched(wo,{d,n:(e&&e.n)||"",by,at:now}); }
-  await B.addLog({kind:"未完工轉入",file:fileName,at:now,by,n,added:added.length,existed:existed.length});
-  return {ok:true,kind:"carry",n,added,existed,doneAlready,dup,sched:schedIn.length};
+  await B.addLog({kind:"未完工轉入",file:fileName,at:now,by,n,added:added.length,existed:existed.length,dueUpd:dueUpd.length});
+  if(dueUpd.length) B.audit({act:"轉入清單更新 DUE",to:`${dueUpd.length} 張：`+dueUpd.slice(0,30).map(x=>`${x[0]} ${x[3]||"無"}→${x[4]}`).join("、"),file:fileName});
+  if(added.length) B.audit({act:"轉入清單新增",to:added.join("、"),file:fileName});
+  return {ok:true,kind:"carry",n,added,existed,doneAlready,dup,sched:schedIn.length,dueUpd,doneListed};
 }
 function curMoY(){ return todayISO().slice(0,4); }
 /* ---------- import: completions ---------- */
@@ -2610,7 +2624,9 @@ function report(r,name){
   if(!r||!r.ok){ if(r) showMsg("匯入失敗",`<p>${esc(r.msg)}</p>`); return; }
   if(r.kind==="carry"){
     let h=`<p>${esc(name)}</p><ul><li>讀入 <b>${r.n}</b> 張未完工轉入工單</li><li>新增 <b>${r.added.length}</b> 張${r.sched?`，其中 ${r.sched} 張依「預排」帶入排定日期`:""}</li>`;
-    if(r.existed.length) h+=`<li>${r.existed.length} 張管控表已有，未重複加入：${esc(r.existed.slice(0,12).join(", "))}${r.existed.length>12?"…":""}</li>`;
+    if(r.existed.length) h+=`<li>${r.existed.length} 張管控表已有，未重複加入${(r.dueUpd||[]).length?`；其中 <b>${r.dueUpd.length}</b> 張 DUE 依清單更新`:"，DUE 都一致"}</li>`;
+    if((r.dueUpd||[]).length) h+=`</ul><div class="preview" style="max-height:34vh;overflow:auto"><table><tr><th>WO</th><th>機號</th><th>卡號</th><th>原 DUE</th><th>新 DUE</th></tr>${r.dueUpd.map(x=>`<tr><td class="mono">${esc(x[0])}</td><td class="mono">${esc(x[1]||"")}</td><td class="mono">${esc(x[2]||"")}</td><td class="mono">${esc(fmtD(x[3])||"—")}</td><td class="mono" style="color:${x[4]<x[3]?"var(--red)":"inherit"}">${esc(fmtD(x[4]))}</td></tr>`).join("")}</table></div><ul>`;
+    if((r.doneListed||[]).length) h+=`<li style="color:var(--amber)">${r.doneListed.length} 張清單列為未完工，但管控表已有完工紀錄（請確認是否誤記完工）：${esc(r.doneListed.map(x=>`${x[0]}（${x[1]} ${x[2]}，完工 ${fmtD(x[3]).slice(5)}）`).join("、"))}</li>`;
     if(r.doneAlready.length) h+=`<li style="color:var(--amber)">${r.doneAlready.length} 張已有完工紀錄：${esc(r.doneAlready.slice(0,12).join(", "))}</li>`;
     if(r.dup.length) h+=`<li>檔內重複 WO ${r.dup.length} 筆，只保留第一筆</li>`;
     showMsg("未完工轉入完成",h+"</ul>"); return;
@@ -4178,7 +4194,7 @@ function rowHTML(w){
   const dueEd=!w.noWo&&w.st!=="done"&&w.st!=="queue"&&canWrite!==false?`<button class="due-ed" data-due="${esc(w.wo)}" title="修改起始日／到期日（調機、FH/FC 變動時）" aria-label="修改起始日／到期日 ${esc(w.wo)}">✎</button>`:"";
   const dueMan=w.dueBy==="manual"?`<span class="mini warn" title="${esc([w.dueNote,w.dueAuto?"原到期 "+fmtD(w.dueAuto):"原為依 FH/FC"].filter(Boolean).join("\n"))}">手動到期${w.dueAuto?"（原 "+esc(fmtD(w.dueAuto).slice(5))+"）":""}</span>${w.dueNote?`<span class="days">${esc(w.dueNote.slice(0,30))}</span>`:""}`:"";
   const dueCell=(w.st==="queue"?`<span style="font-size:12px;color:var(--ink-3)">第 ${w.shortQueue.n}/${w.shortQueue.of} 張${w.projD?`<br>自動預排 <b class="mono">${fmtD(w.projD).slice(5)}</b>`:"<br>缺上次完工日"}</span>`:(w.planD||w.hardD)?`${w.hardD?`<span class="mono">DUE ${fmtD(w.hardD)}</span><span class="days ${leftCls}">${w.dueBy==="manual"?"手動調整":`間隔 ${esc(w.short.it.limitDays)} 天`}${w.st==="done"?"":" · "+leftTxt}</span>`:`<span class="mono" style="color:var(--ink-3)">依 FH/FC</span>`}${w.planD?`<span class="days ${w.st!=="done"&&w.planD<todayISO()&&!w.sched?"soon":""}">預排 ${fmtD(w.planD).slice(5)}（週期 ${esc(w.short.it.cycle)} 天）${w.st!=="done"&&w.planD<todayISO()?" · 已過預排":""}</span>`:""}`:w.due?`${w.start?`<span class="mono" style="font-size:11.5px;color:${w.startMan?"var(--amber)":"var(--ink-3)"}" ${w.startMan?`title="起始日手動調整${w.startAuto?"（原 "+esc(fmtD(w.startAuto))+" 起）":""}"`:""}>${fmtD(w.start).slice(5)} 起${w.startMan?"（手動）":""}</span><br>`:w.startMan&&w.startAuto?`<span class="mono" style="font-size:11.5px;color:var(--amber)" title="原 ${esc(fmtD(w.startAuto))} 起">不限起始日（手動）</span><br>`:""}<span class="mono">${fmtD(w.due)}</span><span class="days ${leftCls}">${w.st==="done"?"":leftTxt}</span>`:`<span class="mono" style="color:var(--ink-3)">${esc(w.dueRaw||"—")}</span>`)+dueMan+dueEd;
-  const tags=priTag(w)+matTag(w)+capTag(w)+flTag(w)+(w.stn?`<span class="mini warn" title="駐站期間 ${esc(fmtD(w.stn.start))}～${esc(fmtD(w.stn.end)||"未定")}">駐 ${esc(w.stn.st)} ${esc(fmtD(w.stn.start).slice(5))}–${esc(fmtD(w.stn.end).slice(5)||"?")} · 限 TPE</span>`:"")+(w.st==="hmv"&&w.hmvEv?`<span class="mini hmvt" title="${esc(w.hmvEv.note||"")}">HMV ${esc(fmtD(w.hmvEv.start).slice(5))}–${esc(fmtD(w.hmvEv.released||w.hmvEv.end).slice(5))}${w.hmvEv.released?" 已 RELEASED":""}</span>`:"")+((w.doneVia==="card"?`<span class="mini" title="以機號＋卡號比對">卡號比對完工：WO ${esc(w.doneSrcWo)}</span>`:"")+[w.doneVia==="sup"?`<span class="mini" title="同機同卡號的較新 WO 已執行，這張舊 WO 一併結案">與 WO ${esc(w.doneSrcWo)} 同次完成</span>`:"",(w.supWos||[]).length?`<span class="mini" title="同機同卡號的舊 WO（例如上月轉入）由這次執行一併結案">同時結 WO ${esc(w.supWos.join("、"))}</span>`:""].join(""))+(w.supBy&&w.st!=="done"?`<span class="mini warn" title="原排定 ${esc(fmtD(w.schedWas||""))}">同卡 ${esc(fmtD(w.supBy.date).slice(5))} 已${w.supBy.wo?"由 WO "+esc(w.supBy.wo):""}完工 · 原排 ${esc(fmtD(w.schedWas||"").slice(5))} 已取消，依預排重排</span>`:"")+(w.longHr?`<span class="mini long">長工時</span>`:"")+(w.dueByMail?`<span class="mini warn" title="${esc(w.dueRaw||"")}">到期日依信件${w.dueRaw?"（原："+esc(w.dueRaw)+"）":""}</span>`:"")+(w.dueBy==="remark"?`<span class="mini warn" title="${esc(w.remark||"")}">到期日依 REMARK 下次 DUE${w.dueOld?"（原 "+esc(fmtD(w.dueOld).slice(5))+"）":""}</span>`:w.dueBy==="text"?`<span class="mini" title="${esc(w.dueRaw||"")}">到期日取自「${esc(String(w.dueRaw||"").replace(/\s+/g," ").slice(0,16))}」</span>`:"")+(w.doneManual?`<span class="mini" title="完工檔匯入後以完工檔為準">手動回報完工${w.doneBy?" · "+esc(who(w.doneBy)):""}</span>`:"")+(w.st!=="done"&&w.month&&w.month<todayISO().slice(0,7)?`<span class="mini">${+w.month.slice(5)}月轉入</span>`:"")+(w.late?`<span class="mini warn">晚於到期日</span>`:"")+(w.missing?`<span class="mini warn">新檔無此單</span>`:"")+(w.retN?`<span class="mini ${w.st==="done"?"":"warn"}" title="${esc(w.lastRet?(w.lastRet.date+" "+w.lastRet.reason+(w.lastRet.note?"："+w.lastRet.note:"")):"")}">退工 ${w.retN} 次${w.lastRet?"："+esc(w.lastRet.reason)+" · "+esc(fmtD(w.lastRet.date).slice(5)):""}${w.st==="done"?" · 已完工":w.sched?" · 已重排":" · 待重排"}</span>`:"")+holdTag(w)+(w.fixN?`<span class="mini ${w.fixOpen?"warn":""}">改工單 ${w.fixN}${w.fixOpen?` · ${w.fixOpen} 待修正`:" · 已修正"}</span>`:"")+(w.short||w.shortQueue?`<span class="mini long">短天期</span>`:"")+(w.carry?`<span class="mini">跨月</span>`:"")+(w.adhoc?`<span class="mini long">臨時加工</span>`:w.alsoAdhoc?`<span class="mini long">臨時通知＋月計畫</span>`:"")+(w.early?`<span class="mini warn">早於可執行日</span>`:"")+(w.sender||w.sentAt?`<span class="mini" title="${esc(w.subject||w.src||"")}">${esc(w.sender||"")}${w.sentAt?" · "+esc(fmtD(w.sentAt.slice(5,10))+" "+w.sentAt.slice(11,16)):""}</span>`:w.src?`<span class="mini" title="${esc(w.src)}">${esc(w.src.length>28?w.src.slice(0,28)+"…":w.src)}</span>`:"");
+  const tags=priTag(w)+matTag(w)+capTag(w)+flTag(w)+(w.stn?`<span class="mini warn" title="駐站期間 ${esc(fmtD(w.stn.start))}～${esc(fmtD(w.stn.end)||"未定")}">駐 ${esc(w.stn.st)} ${esc(fmtD(w.stn.start).slice(5))}–${esc(fmtD(w.stn.end).slice(5)||"?")} · 限 TPE</span>`:"")+(w.st==="hmv"&&w.hmvEv?`<span class="mini hmvt" title="${esc(w.hmvEv.note||"")}">HMV ${esc(fmtD(w.hmvEv.start).slice(5))}–${esc(fmtD(w.hmvEv.released||w.hmvEv.end).slice(5))}${w.hmvEv.released?" 已 RELEASED":""}</span>`:"")+((w.doneVia==="card"?`<span class="mini" title="以機號＋卡號比對">卡號比對完工：WO ${esc(w.doneSrcWo)}</span>`:"")+[w.doneVia==="sup"?`<span class="mini" title="同機同卡號的較新 WO 已執行，這張舊 WO 一併結案">與 WO ${esc(w.doneSrcWo)} 同次完成</span>`:"",(w.supWos||[]).length?`<span class="mini" title="同機同卡號的舊 WO（例如上月轉入）由這次執行一併結案">同時結 WO ${esc(w.supWos.join("、"))}</span>`:""].join(""))+(w.supBy&&w.st!=="done"?`<span class="mini warn" title="原排定 ${esc(fmtD(w.schedWas||""))}">同卡 ${esc(fmtD(w.supBy.date).slice(5))} 已${w.supBy.wo?"由 WO "+esc(w.supBy.wo):""}完工 · 原排 ${esc(fmtD(w.schedWas||"").slice(5))} 已取消，依預排重排</span>`:"")+(w.longHr?`<span class="mini long">長工時</span>`:"")+(w.dueFile&&w.dueWas!==undefined&&w.st!=="done"?`<span class="mini" title="${esc(w.dueFile)}">DUE 依轉入清單更新（原 ${esc(fmtD(w.dueWas).slice(5)||"無")}）</span>`:"")+(w.dueByMail?`<span class="mini warn" title="${esc(w.dueRaw||"")}">到期日依信件${w.dueRaw?"（原："+esc(w.dueRaw)+"）":""}</span>`:"")+(w.dueBy==="remark"?`<span class="mini warn" title="${esc(w.remark||"")}">到期日依 REMARK 下次 DUE${w.dueOld?"（原 "+esc(fmtD(w.dueOld).slice(5))+"）":""}</span>`:w.dueBy==="text"?`<span class="mini" title="${esc(w.dueRaw||"")}">到期日取自「${esc(String(w.dueRaw||"").replace(/\s+/g," ").slice(0,16))}」</span>`:"")+(w.doneManual?`<span class="mini" title="完工檔匯入後以完工檔為準">手動回報完工${w.doneBy?" · "+esc(who(w.doneBy)):""}</span>`:"")+(w.st!=="done"&&w.month&&w.month<todayISO().slice(0,7)?`<span class="mini">${+w.month.slice(5)}月轉入</span>`:"")+(w.late?`<span class="mini warn">晚於到期日</span>`:"")+(w.missing?`<span class="mini warn">新檔無此單</span>`:"")+(w.retN?`<span class="mini ${w.st==="done"?"":"warn"}" title="${esc(w.lastRet?(w.lastRet.date+" "+w.lastRet.reason+(w.lastRet.note?"："+w.lastRet.note:"")):"")}">退工 ${w.retN} 次${w.lastRet?"："+esc(w.lastRet.reason)+" · "+esc(fmtD(w.lastRet.date).slice(5)):""}${w.st==="done"?" · 已完工":w.sched?" · 已重排":" · 待重排"}</span>`:"")+holdTag(w)+(w.fixN?`<span class="mini ${w.fixOpen?"warn":""}">改工單 ${w.fixN}${w.fixOpen?` · ${w.fixOpen} 待修正`:" · 已修正"}</span>`:"")+(w.short||w.shortQueue?`<span class="mini long">短天期</span>`:"")+(w.carry?`<span class="mini">跨月</span>`:"")+(w.adhoc?`<span class="mini long">臨時加工</span>`:w.alsoAdhoc?`<span class="mini long">臨時通知＋月計畫</span>`:"")+(w.early?`<span class="mini warn">早於可執行日</span>`:"")+(w.sender||w.sentAt?`<span class="mini" title="${esc(w.subject||w.src||"")}">${esc(w.sender||"")}${w.sentAt?" · "+esc(fmtD(w.sentAt.slice(5,10))+" "+w.sentAt.slice(11,16)):""}</span>`:w.src?`<span class="mini" title="${esc(w.src)}">${esc(w.src.length>28?w.src.slice(0,28)+"…":w.src)}</span>`:"");
   const miss="";
   const by=w.schedBy&&(w.sched||w.note)?`<button class="by wo-link" data-hist="${esc(w.wo)}">${esc(who(w.schedBy))} ${esc(fmtT(w.schedAt).slice(5))}</button>`:"";
   return `<tr class="st-${w.st}">
