@@ -4782,8 +4782,8 @@ const LX=(()=>{
   // split pasted text into mails by Outlook headers (寄件者／From)
   function mails(txt){ const lines=txt.replace(/\r/g,"").split("\n"); const out=[]; let cur=null;
     for(const l of lines){ if(/^\s*(寄件者|From)\s*[:：]/i.test(l)||!cur){ cur={lines:[]}; out.push(cur); } cur.lines.push(l); }
-    return out.map(m=>{ const t=m.lines.join("\n"); const h=k=>{ const r=new RegExp("^\\s*(?:"+k+")\\s*[:：]\\s*(.+)$","im"); const x=t.match(r); return x?x[1].trim():""; };
-      const from=h("寄件者|From").replace(/<[^>]*>/g,"").replace(/\[.*?\]/g,"").trim(), subj=h("主旨|Subject").replace(/^(RE|FW|FWD|回覆|轉寄)\s*[:：]\s*/i,"").trim();
+    return out.map(m=>{ const t=m.lines.join("\n"); const h=k=>{ const r=new RegExp("^[ \\t]*(?:"+k+")[ \\t]*[:：][ \\t]*(.+)$","im"); const x=t.match(r); return x?x[1].trim():""; };
+      const from=h("寄件者|From").replace("（未辨識）","").replace(/<[^>]*>/g,"").replace(/\[.*?\]/g,"").trim(), subj=h("主旨|Subject").replace(/^(RE|FW|FWD|回覆|轉寄)\s*[:：]\s*/i,"").trim();
       const sentRaw=h("寄件日期|傳送時間|Sent|Date|日期"); return {text:t,from,subject:subj,sentAt:sentOf(sentRaw)}; }); }
   function sentOf(s){ if(!s) return ""; let m=s.match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日.*?(上午|下午)?\s*(\d{1,2}):(\d{2})/);
     if(m){ let h=+m[5]; if(m[4]==="下午"&&h<12) h+=12; if(m[4]==="上午"&&h===12) h=0; return `${m[1]}-${p2(m[2])}-${p2(m[3])}T${p2(h)}:${m[6]}`; }
@@ -4804,6 +4804,7 @@ const LX=(()=>{
       if(rg){ const a=dates(rg[0],y); if(a.length>=2){ start=a[0].d; due=a[1].d; } }
       if(!due){ const k=D.find(x=>/前|之前|BEFORE|屆期|DUE|到期/i.test(body.slice(x.end,x.end+8)+body.slice(Math.max(0,x.i-10),x.i))); if(k) due=k.d; }
       const D_due=due;
+      const mailCx0=/\bCX\s*(WO|工單)|REMOVE\s*(並|&|AND|\/)?\s*CX\b|取消(此|以下|下列)?\s*(工單|WO)|CANCEL\s*(THE\s*)?WO/i.test(body+" "+(M_.subject||""));
       // table rows (tab-separated, from Outlook): find the header row
       let hi=lines.findIndex(l=>l.includes("\t")&&/\b(WO|TRX|WORK ?ORDER)\b|工單/i.test(l));
       const got=[];
@@ -4820,11 +4821,13 @@ const LX=(()=>{
           const wo=(g("wo").match(/\d{6,8}/)||[""])[0], note=g("note"), mr=g("mr"), cfg=g("cfg");
           let tail=tailOf(ci.tail>=0?g("tail"):c.join(" "))||tailOf(c.join(" "))||tailOf(body)||tailOf(M_.subject);
           let action="add", serial="", serialOld="", due=(ci.due>=0?((dates(g("due"),y)[0]||{}).d||""):"")||D_due;
-          if(/CANCEL|取消|刪除|作廢/i.test(note)) action="cancel";
+          if(/CANCEL|取消|刪除|作廢|\bCX\b/i.test(note)||(mailCx0&&!/ADD|新增/i.test(note))) action="cancel";
           else { const so=note.match(/([A-Z0-9]{5,})\s*OFF\s*[\/／,，]?\s*([A-Z0-9]{5,})\s*ON/i); if(so||/更換序號|換序號|序號更換/.test(note)){ action="serial"; if(so){ serialOld=so[1].toUpperCase(); serial=so[2].toUpperCase(); } }
             const nd=(dates(note,y)[0]||{}).d; if(nd&&action==="add") due=nd; }
           if(!wo&&!(action==="cancel"&&mr)) continue;
           got.push({wo,tail,mr,title:g("title"),pkgId:g("pkg"),pkgType:g("ptype"),part:g("part"),config:cfg,serial,serialOld,start:action==="add"&&!/\d/.test(note)?start:"",due:action==="add"?due:"",remark:[note,ci.per>=0&&g("per")?`Schedule Period ${g("per")}`:""].filter(Boolean).join("；").slice(0,120),action,...meta}); } }
+      // 整封信說取消（「REMOVE 並 CX WO」「CX WO」「取消工單」「CANCEL WO」）：信中的工單都算取消
+      const mailCx=/\bCX\s*(WO|工單)|REMOVE\s*(並|&|AND|\/)?\s*CX\b|取消(此|以下|下列)?\s*(工單|WO)|CANCEL\s*(THE\s*)?WO/i.test(body+" "+(M_.subject||""));
       // free text: every WO number in the mail
       if(!got.length){ const seen=new Set(); let m; WO_RE.lastIndex=0;
         const nums=[]; while((m=WO_RE.exec(body))) nums.push({wo:m[1],i:m.index});
@@ -4837,7 +4840,7 @@ const LX=(()=>{
           const tm=title?null:body.match(/執行\s*([A-Z][A-Z0-9 \/&\-]{2,60}?)\s*[\(（]/i)||body.match(/執行\s*([^\n，。,(（]{2,40})/); if(tm) title=tm[1].trim();
           if(!title&&M_.subject) title=M_.subject.replace(/^(RE|FW)\s*[:：]\s*/i,"").replace(tail,"").trim().slice(0,80);
           const eng=near.match(/#\s*\d\s*ENG\s*[A-Z0-9]*/i)||near.match(/ENG\s*#\s*\d/i);
-          const cancel=/CANCEL|取消|刪除|作廢/i.test(body.slice(Math.max(0,n.i-60),n.i+80));
+          const cancel=/CANCEL|取消|刪除|作廢/i.test(body.slice(Math.max(0,n.i-60),n.i+80))||mailCx;
           got.push({wo:n.wo,tail,mr,title,start,due,remark:eng?eng[0].replace(/\s+/g," "):"",action:cancel?"cancel":"add",...meta}); } }
       rows.push(...got); }
     const M0=mails(txt)[0]||{}; return {subject:M0.subject||"",from:M0.from||"",sentAt:M0.sentAt||"",rows}; }
@@ -4911,23 +4914,34 @@ let _ocrW=null;
 function ocrWorker(){ return _ocrW||(_ocrW=(async()=>{
   if(!window.Tesseract) await new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"; sc.onload=res; sc.onerror=()=>rej(new Error("辨識元件下載失敗")); document.head.appendChild(sc); });
   return Tesseract.createWorker(["chi_tra","eng"],1,{logger:m=>{ if(window.__ocrProg) window.__ocrProg(m); }}); })().catch(e=>{ _ocrW=null; throw e; })); }
+// 一張截圖辨識三次：原圖放大、黑白（深色字在淺色或彩色底上，例如橘色標示列）、黑白再放大。
+// 以第一次為主（表頭、寄件人、內文），其他次讀到、但主結果沒有的 WO（7 碼）那一行補進來
 async function ocrImages(files,signal){ const w=await ocrWorker(); const out=[];
-  for(const f of files){ if(signal&&signal.aborted){ const e=new Error("cancelled"); e.code="cancelled"; throw e; }
-    const bm=await createImageBitmap(f); const k=bm.width<1400?2:1; const c=document.createElement("canvas"); c.width=bm.width*k; c.height=bm.height*k;
+  const pass=async(bm,k,thr)=>{ k=Math.max(1,Math.min(k,Math.floor(6000/bm.width)||1)); const c=document.createElement("canvas"); c.width=bm.width*k; c.height=bm.height*k;
     const g=c.getContext("2d"); g.imageSmoothingQuality="high"; g.drawImage(bm,0,0,c.width,c.height);
-    const r=await w.recognize(c); out.push(ocrNorm(r.data.text||"")); }
+    if(thr){ const d=g.getImageData(0,0,c.width,c.height), p=d.data; for(let i=0;i<p.length;i+=4){ const v=(0.299*p[i]+0.587*p[i+1]+0.114*p[i+2])<thr?0:255; p[i]=p[i+1]=p[i+2]=v; } g.putImageData(d,0,0); }
+    const r=await w.recognize(c); return String(r.data.text||""); };
+  for(const f of files){ if(signal&&signal.aborted){ const e=new Error("cancelled"); e.code="cancelled"; throw e; }
+    const bm=await createImageBitmap(f);
+    let base=ocrNorm(await pass(bm,bm.width<1400?2:2,0));
+    for(const [k,thr] of [[2,130],[3,170]]){ if(signal&&signal.aborted) break;
+      const t=ocrNorm(await pass(bm,k,thr),true); const have=new Set(base.match(/\b\d{7}\b/g)||[]);
+      for(const l of t.split("\n")){ const ws=l.match(/\b1\d{6}\b/g)||[]; if(ws.some(x=>!have.has(x))){ base+="\n"+l.trim(); ws.forEach(x=>have.add(x)); } } }
+    out.push(base); }
   return out.join("\n\n"); }
 // 辨識結果整理：去掉中文字之間的空格、修正常見誤認，並把截圖上方的寄件人／時間／主旨補成「寄件者：」等表頭，讓信件解析照常運作
-function ocrNorm(t){ let s=String(t).replace(/\r/g,"");
+function ocrNorm(t,noHead){ let s=String(t).replace(/\r/g,"");
   for(let i=0;i<3;i++) s=s.replace(/([一-鿿\u3000-\u303f\uff00-\uffef]) +(?=[一-鿿\u3000-\u303f\uff00-\uffef])/g,"$1");
   s=s.replace(/\bA[\/V\\|lI1]C\b/g,"A/C").replace(/\bW\s?O\s?NO\b/gi,"WO NO").replace(/\bB\s*[-—–~]\s*(\d{5})\b/g,"B-$1").replace(/[|｜]/g," ").replace(/ +/g," ");
+  // 卡號最後一段的 0／1 常被認成 O、I、L（CAA-2026-02-001-OL → -01）
+  s=s.replace(/\b([A-Z]{1,6}\d{0,4}(?:-[A-Z0-9]{1,8}){2,5})-([0-9OIL]{2})\b/g,(m,a,b)=>/[OIL]/.test(b)&&/\d/.test(a)?a+"-"+b.replace(/O/g,"0").replace(/[IL]/g,"1"):m);
   s=s.replace(/ ?, ?(?=[一-鿿])/g,"，").replace(/([一-鿿]) ?, ?/g,"$1，").replace(/ ?。/g,"。");
   s=s.replace(/(\d{4})\/(\d{1,2})\/(\d{1,2})\s*(?:[\(（][^)）]*[\)）])?\s*(上午|下午)?\s*(\d{1,2}):(\d{2})/,(m,y,mo,d,ap,h,mi)=>`${y}年${mo}月${d}日 ${ap||""} ${h}:${mi}`)
        .replace(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\w*\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*(AM|PM)?/i,(m,mo,d,y,h,mi,ap)=>{ let H=+h; if(/PM/i.test(ap||"")&&H<12) H+=12; if(/AM/i.test(ap||"")&&H===12) H=0; return `${y}/${mo}/${d} ${String(H).padStart(2,"0")}:${mi}`; });
-  if(!/^\s*(寄件者|From)\s*[:：]/im.test(s)){ const L=s.split("\n"); const di=L.findIndex(l=>/\d{4}年\d{1,2}月\d{1,2}日.*\d{1,2}:\d{2}|\d{4}\/\d{1,2}\/\d{1,2} \d{1,2}:\d{2}/.test(l));
+  if(!noHead&&!/^\s*(寄件者|From)\s*[:：]/im.test(s)){ const L=s.split("\n"); const di=L.findIndex(l=>/\d{4}年\d{1,2}月\d{1,2}日.*\d{1,2}:\d{2}|\d{4}\/\d{1,2}\/\d{1,2} \d{1,2}:\d{2}/.test(l));
     if(di>=0&&di<10){ let si=-1; for(let i=di;i>=0&&i>=di-3;i--) if(/@|<.+>|[A-Za-z]+ [A-Za-z]+ ?[一-鿿]{2,4}/.test(L[i])&&i!==di){ si=i; break; }
-      const sender=si>=0?L[si].replace(/<[^>]*>?|\S+@\S+/g,"").trim():""; const subj=L.slice(0,si>=0?si:di).map(x=>x.trim()).filter(Boolean)[0]||"";
-      const head=[sender?"寄件者: "+sender:"寄件者: ","寄件日期: "+L[di].trim(),subj?"主旨: "+subj:""].filter(Boolean);
+      let sender=si>=0?L[si].replace(/<[^>]*>?|\S+@\S+/g,"").trim():""; if(/寄件|收件|副本|主旨|\d{4}年/.test(sender)) sender=""; /* 讀錯的那行不要當寄件人 */ const subj=L.slice(0,si>=0?si:di).map(x=>x.trim()).filter(Boolean)[0]||"";
+      const head=[sender?"寄件者: "+sender:"寄件者: （未辨識）","寄件日期: "+L[di].trim(),subj?"主旨: "+subj:""].filter(Boolean);
       s=[...head,...L.filter((_,i)=>i!==di&&i!==si&&!(subj&&L[i].trim()===subj))].join("\n"); } }
   return s; }
 const LOCAL_AI={local:true, async limits(){ return {images:{maxCount:6,mediaTypes:["image/png","image/jpeg","image/webp","image/gif","image/bmp"]}}; },
