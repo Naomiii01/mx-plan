@@ -1842,7 +1842,11 @@ async function importDone(wb,fileName,map){
   const reg=derive().reg; const matched=Object.keys(recs).filter(w=>reg[w]).length;
   const extras=Object.keys(recs).filter(w=>!reg[w]);
   // split very large batches so each stored document stays small
-  for(const [id,b] of Object.entries(M.done)) if(!b.manual&&b.file===fileName&&!id.startsWith("__")){ if(mode==="db") await q("done/"+id,()=>withRetry(()=>db.doc("done/"+id).delete())).catch(()=>{}); delete M.done[id]; }
+  // 同檔名的舊匯入：只有在這次檔案「完全涵蓋」那次的完工時才當成重複匯入而取代。
+  // 每天的完工檔常用同一個檔名（task close.xlsx），內容卻是不同天：那種一定要保留，完工紀錄才會累積（10/30 修正）
+  { const byImp={}; for(const [id,b] of Object.entries(M.done)) if(!b.manual&&b.file===fileName&&!id.startsWith("__")) (byImp[b.at||id]=byImp[b.at||id]||[]).push(id);
+    for(const ids of Object.values(byImp)){ const old=ids.flatMap(id=>Object.keys(M.done[id].recs||{}));
+      if(old.length&&old.every(wo=>recs[wo]!==undefined)) for(const id of ids){ if(mode==="db") await q("done/"+id,()=>withRetry(()=>db.doc("done/"+id).delete())).catch(()=>{}); delete M.done[id]; } } }
   const keys=Object.keys(recs); const CH=6000; const base=now.slice(0,10).replace(/-/g,"")+"-"+uid();
   for(let i=0;i<keys.length;i+=CH){ const part={}; keys.slice(i,i+CH).forEach(k=>part[k]=recs[k]); await B.addDone(base+"-"+(i/CH),{file:fileName,at:now,by,recs:part}); }
   const CC=2500; for(let i=0;i<cards.length;i+=CC) await B.addDone(base+"-c"+(i/CC),{file:fileName,at:now,by,recs:{},cards:cards.slice(i,i+CC)});
