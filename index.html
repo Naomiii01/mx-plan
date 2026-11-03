@@ -482,7 +482,43 @@ body.v-day #secLoad,body.v-month #secLoad{display:none}
 .dsec[open]>summary::before{transform:rotate(90deg)}
 .dsec h3{margin:0;font-size:15.5px;font-weight:700}
 .dsec summary .ct{font-family:var(--mono);font-size:13px;color:var(--ink-2);background:var(--panel-2);border-radius:999px;padding:0 8px}
-.dsec summary .hint{font-size:12px;color:var(--ink-3)}
+.dsec summary .hint{display:none}
+/* 11/3 精簡：快速改期／更多選單／已完工收合／退工卡片 */
+.pop{position:absolute;z-index:70;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.18);padding:8px;min-width:200px;max-width:calc(100vw - 24px)}
+.pop .pop-t{font-size:12px;color:var(--ink-3);margin:0 2px 6px}
+.pop .pop-days{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+.pop .pop-days button{display:flex;justify-content:space-between;gap:8px;border:1px solid var(--line-2);background:var(--panel-2);border-radius:6px;padding:6px 8px;font-size:13px;text-align:left}
+.pop .pop-days button:hover,.pop .pop-days button.on{border-color:var(--accent);background:var(--accent-soft)}
+.pop .pop-days button .n{color:var(--ink-3);font-size:11.5px}
+.pop .pop-days button.late{color:var(--red)}
+.pop .pop-row{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.pop .pop-row input{border:1px solid var(--line);background:var(--panel-2);border-radius:6px;padding:4px 8px}
+.pop .pop-menu{display:flex;flex-direction:column;gap:2px}
+.pop .pop-menu button{border:0;background:none;text-align:left;padding:7px 10px;border-radius:6px;font-size:13.5px}
+.pop .pop-menu button:hover{background:var(--panel-2)}
+.pop .pop-menu button.del{color:var(--red)}
+.btn.pick{font-family:var(--mono,monospace);font-size:12.5px;padding:4px 10px}
+.btn.pick.auto{border-style:dashed}
+.btn.pick.late{border-color:var(--red);color:var(--red)}
+.btn.more{padding:4px 8px;letter-spacing:1px}
+.dg-done{display:block;width:100%;text-align:left;border:0;border-top:1px solid var(--line-2);background:none;padding:6px 10px;font-size:12.5px;color:var(--green)}
+.dg-done:hover{background:var(--panel-2)}
+.d-find{display:flex;gap:8px;align-items:center;margin:4px 0 2px}
+.d-find input{flex:1;max-width:340px;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:6px 10px;font-size:13px}
+.toast .tbtn{margin-left:12px;background:none;border:1px solid currentColor;color:inherit;border-radius:4px;padding:2px 8px;font-size:12.5px;cursor:pointer}
+.rc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-top:8px}
+.rc{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.rc-h{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.rc-h .tail-reg{font-size:14px}
+.rc-h .rc-d{margin-left:auto;font-size:12px;color:var(--ink-3)}
+.rc-c{font-size:13px;font-weight:600;font-family:var(--mono,monospace);overflow-wrap:anywhere}
+.rc-t{font-size:12.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc-n{font-size:12px;color:var(--ink-3);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.rc-tags{display:flex;gap:4px;flex-wrap:wrap}
+.rc-a{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:4px}
+.rc-sec{margin-top:18px}.rc-sec h3{font-size:15px;margin:0;display:flex;gap:8px;align-items:center}
+.rc-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rc-bar input{border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:6px 10px;font-size:13px;min-width:200px}
 .dsec-b{padding:0 14px 12px}
 .empty.sm{padding:14px;font-size:13px}
 .dsub{font-size:12.5px;font-weight:500;color:var(--orange);margin:12px 0 6px;display:flex;gap:6px;align-items:center}
@@ -652,6 +688,8 @@ body.v-stn .wrap>section.blk:not(#secStn),body.v-stn #drop{display:none}
 body:not(.v-stn) #secStn{display:none}
 body.v-dsp .wrap>section.blk:not(#secDsp),body.v-dsp #drop{display:none}
 body.v-pri .wrap>section.blk:not(#secPri),body.v-pri #drop{display:none}
+body.v-ret .wrap>section.blk:not(#secRet),body.v-ret #drop{display:none}
+body:not(.v-ret) #secRet{display:none}
 body.v-kpi .wrap>section.blk:not(#secKpi),body.v-kpi #drop{display:none}body:not(.v-kpi) #secKpi{display:none}
 .kp-t{width:100%;border-collapse:collapse;font-size:13px}.kp-t th,.kp-t td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}.kp-t tbody th{text-align:left;font-weight:500}
 .kp-t thead th{background:var(--panel-2);font-size:12.5px}.kp-t thead th:first-child{text-align:left}.kp-t .on{background:color-mix(in srgb,var(--accent) 9%,transparent)}.kp-t .tot{font-weight:700}
@@ -970,13 +1008,14 @@ body:not(.v-dsp) #secDsp{display:none}
 
   <section class="gate" id="gate" hidden></section>
   <div id="banners"></div>
-  <nav class="vtabs" id="vtabs" aria-label="檢視"><button data-view="day">今日控管 <span class="ct"></span></button><button data-view="stn">駐站</button><button data-view="pri">優先排工</button><button data-view="dsp">派遣檢查</button><button data-view="load">月負荷</button><button data-view="month">月計畫總覽</button><button data-view="kpi">考核統計</button><div class="gsearch"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input type="search" id="gq" placeholder="搜尋 WO／卡號／機號／工作名稱" aria-label="搜尋工單" autocomplete="off"><div class="gres" id="gres" hidden></div></div></nav>
+  <nav class="vtabs" id="vtabs" aria-label="檢視"><button data-view="day">今日控管 <span class="ct"></span></button><button data-view="ret">退工 <span class="ct"></span></button><button data-view="stn">駐站</button><button data-view="pri">優先排工</button><button data-view="dsp">派遣檢查</button><button data-view="load">月負荷</button><button data-view="month">月計畫總覽</button><button data-view="kpi">考核統計</button><div class="gsearch"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input type="search" id="gq" placeholder="搜尋 WO／卡號／機號／工作名稱" aria-label="搜尋工單" autocomplete="off"><div class="gres" id="gres" hidden></div></div></nav>
   <section class="blk" id="secDay"></section>
   <section class="blk" id="secLoad"></section>
   <section class="blk" id="secKpi"></section>
   <section class="blk" id="secStn"></section>
   <section class="blk" id="secDsp"></section>
   <section class="blk" id="secPri"></section>
+  <section class="blk" id="secRet"></section>
   <div class="drop" id="drop">把 Excel 拖到這裡：工單檔、完工檔，或先前匯出的管控檔（會自動辨識）。Outlook 另存的信件檔（.txt／.msg／.eml）也可以拖進來，會自動分到「匯入退工」或「臨時工單」。</div>
 
   <section class="blk">
@@ -2415,7 +2454,7 @@ function srtApplyT(tb){ const P=srtParts(tb); if(!P) return; const st=SRT[srtTKe
   const L=P.body.map((r,i)=>({r,i,v:srtVal(r.cells[st.c])})).sort((a,b)=>{ const x=srtCmp(a.v,b.v); return (a.v==null||b.v==null?x:x*st.d)||a.i-b.i; });
   if(L.every((o,i)=>o.r===P.body[i])) return; const after=P.body[P.body.length-1].nextSibling; L.forEach(o=>par.insertBefore(o.r,after)); }
 // 工單清單（今日控管各區塊、外站衝突等）
-const SRT_F=[["st","機號"],["sw","WO"],["sc","工作"],["sdue","DUE"],["ssd","排定"]];
+const SRT_F=[["stail","機號"],["sw","WO"],["sc","工作"],["sdue","DUE"],["ssd","排定"]];
 function srtLists(){ const hosts=new Set(); document.querySelectorAll(".dw[data-sx]").forEach(e=>hosts.add(e.parentNode));
   const ord={};
   for(const h of hosts){ const items=[...h.children].filter(e=>e.matches(".dw[data-sx]")); if(items.length<2) continue;
@@ -3088,7 +3127,9 @@ function membersDlg(){
     membersDlg(); });
   d.querySelector("#mSave").onclick=async()=>{ for(const [id,m] of mem){ const n=nameOf(id); if(n&&n!==m.name){ await db.doc("members/"+id).set({...m,name:n}).catch(()=>{}); B.audit({act:"修改使用者名稱",from:m.name,to:n}); } } closeDlg(); toast("名稱已儲存"); };
 }
-let tt; function toast(t){let el=$(".toast"); if(!el){el=document.createElement("div");el.className="toast";document.body.appendChild(el);} el.textContent=t; el.hidden=false; clearTimeout(tt); tt=setTimeout(()=>el.hidden=true,2600);}
+let tt; function toast(t,acts){let el=$(".toast"); if(!el){el=document.createElement("div");el.className="toast";document.body.appendChild(el);} el.textContent=t;
+  (acts||[]).forEach(([lbl,fn])=>{ const b=document.createElement("button"); b.className="tbtn"; b.textContent=lbl; b.onclick=()=>{ el.hidden=true; fn(); }; el.appendChild(b); });
+  el.hidden=false; clearTimeout(tt); tt=setTimeout(()=>el.hidden=true,acts&&acts.length?6000:2600);}
 
 /* =====================================================================
    EXPORT
@@ -3567,12 +3608,12 @@ function renderNow0(){
   $("#tails").hidden=!ui.fleetOpen&&!ui.tail;
   $("#tails").innerHTML=Object.keys(tails).sort().map(k=>{const t=tails[k]; const seg=["done","sched","past","wait","todo","miss","soon","over"].map(s=>t[s]?`<span class="${ST[s].c}" style="width:${t[s]/t.n*100}%;background:var(--c)"></span>`:"").join("");
     return `<button class="tail ${ui.tail===k?"on":""}" data-tail="${esc(k)}"><div class="tail-h"><span class="tail-reg">${esc(k)}</span><span class="tail-type">${esc(t.type)}${derive().hmvOn[k]?` <span class="mini hmvt">HMV</span>`:""}${(()=>{ const x=stintAt(k,todayISO()); return x?` <span class="mini">${esc(x.station)}</span>`:""; })()}</span></div><div class="bar">${seg}</div><div class="tail-m"><span>共 <b>${t.n}</b></span><span>完工 <b>${t.done}</b></span>${t.over?`<span class="r">逾期 <b>${t.over}</b></span>`:""}${t.soon?`<span class="a">快屆 <b>${t.soon}</b></span>`:""}${t.past?`<span class="a">待確認 <b>${t.past}</b></span>`:""}${t.miss?`<span class="r">消失 <b>${t.miss}</b></span>`:""}${!t.over&&!t.soon&&!t.miss?`<span>未排 <b>${t.todo}</b></span>`:""}</div></button>`}).join("")||`<div class="empty">尚未匯入工單</div>`;
-  const af=[]; if(ui.tail) af.push(["tail","機號 "+ui.tail]); if(ui.status) af.push(["status",ST[ui.status].t]); if(ui.check){const c=checksOf(all).find(c=>c.k===ui.check); if(c) af.push(["check",c.t]);}
+  const af=[]; if(ui.tail) af.push(["tail","機號 "+ui.tail]); if(ui.status&&!ST[ui.status]) ui.status=""; if(ui.status) af.push(["status",ST[ui.status].t]); if(ui.check){const c=checksOf(all).find(c=>c.k===ui.check); if(c) af.push(["check",c.t]);}
   $("#activeF").innerHTML=af.map(([k,t])=>`<button class="tag" data-clr="${k}">${esc(t)}</button>`).join("");
   document.querySelectorAll("th.sortable").forEach(th=>{const base=th.textContent.replace(/ [▲▼]$/,""); th.textContent=base+(th.dataset.k===ui.sort?(ui.dir>0?" ▲":" ▼"):"");});
-  document.body.classList.toggle("v-day",ui.view==="day"); document.body.classList.toggle("v-load",ui.view==="load"); document.body.classList.toggle("v-month",ui.view==="month"); document.body.classList.toggle("v-stn",ui.view==="stn"); document.body.classList.toggle("v-dsp",ui.view==="dsp"); document.body.classList.toggle("v-pri",ui.view==="pri"); document.body.classList.toggle("v-kpi",ui.view==="kpi");
-  document.querySelectorAll("#vtabs [data-view]").forEach(b=>{ b.classList.toggle("on",b.dataset.view===ui.view); if(b.dataset.view==="day"){ const n=all.filter(w=>w.st==="past"||(w.st==="over"&&!w.hold)||pzAlert(w)).length; b.querySelector(".ct").textContent=n||""; } });
-  safeRun("今日控管",renderDay); safeRun("月負荷",renderLoad); safeRun("駐站",renderStn); safeRun("派遣檢查",renderDsp); safeRun("優先排工",renderPri); safeRun("考核統計",renderKpi);
+  document.body.classList.toggle("v-day",ui.view==="day"); document.body.classList.toggle("v-load",ui.view==="load"); document.body.classList.toggle("v-month",ui.view==="month"); document.body.classList.toggle("v-stn",ui.view==="stn"); document.body.classList.toggle("v-dsp",ui.view==="dsp"); document.body.classList.toggle("v-pri",ui.view==="pri"); document.body.classList.toggle("v-kpi",ui.view==="kpi"); document.body.classList.toggle("v-ret",ui.view==="ret");
+  document.querySelectorAll("#vtabs [data-view]").forEach(b=>{ b.classList.toggle("on",b.dataset.view===ui.view); if(b.dataset.view==="day"){ const n=all.filter(w=>w.st==="past"||(w.st==="over"&&!w.hold)||pzAlert(w)).length; b.querySelector(".ct").textContent=n||""; } if(b.dataset.view==="ret"){ const n=all.filter(w=>w.retPending).length; b.querySelector(".ct").textContent=n||""; } });
+  safeRun("今日控管",renderDay); safeRun("月負荷",renderLoad); safeRun("駐站",renderStn); safeRun("派遣檢查",renderDsp); safeRun("優先排工",renderPri); safeRun("考核統計",renderKpi); safeRun("退工",renderRet);
   if(ui.view!=="month") return;
   safeRun("工單明細",()=>renderTable(all)); safeRun("短天期",renderShort); safeRun("統計",renderStats); safeRun("操作紀錄",renderLog);
   resolveNames();
@@ -3586,8 +3627,8 @@ function logErr(e,where){ try{ console.error(where,e); if(errN++>30) return; con
     if(errN<=3) toast(`「${where}」顯示時發生錯誤，已自動記錄；其他功能可繼續使用`); }catch(x){} }
 function safeRun(where,f){ try{ f(); }catch(e){ logErr(e,where); } }
 function renderNow(){ try{ renderNow0(); }catch(e){ logErr(e,"畫面更新");
-    try{ ["day","load","month","stn","dsp","pri","kpi"].forEach(v=>document.body.classList.toggle("v-"+v,ui.view===v)); document.querySelectorAll("#vtabs [data-view]").forEach(b=>b.classList.toggle("on",b.dataset.view===ui.view)); }catch(x){}
-    safeRun("今日控管",renderDay); safeRun("月負荷",renderLoad); safeRun("駐站",renderStn); safeRun("派遣檢查",renderDsp); safeRun("優先排工",renderPri); safeRun("考核統計",renderKpi);
+    try{ ["day","load","month","stn","dsp","pri","kpi","ret"].forEach(v=>document.body.classList.toggle("v-"+v,ui.view===v)); document.querySelectorAll("#vtabs [data-view]").forEach(b=>b.classList.toggle("on",b.dataset.view===ui.view)); }catch(x){}
+    safeRun("今日控管",renderDay); safeRun("月負荷",renderLoad); safeRun("駐站",renderStn); safeRun("派遣檢查",renderDsp); safeRun("優先排工",renderPri); safeRun("考核統計",renderKpi); safeRun("退工",renderRet);
     if(ui.view==="month"){ safeRun("工單明細",()=>renderTable(derive().all)); safeRun("短天期",renderShort); safeRun("統計",renderStats); } } }
 window.addEventListener("error",e=>logErr(e.error||e.message,"未預期錯誤"));
 window.addEventListener("unhandledrejection",e=>{ const r=e.reason; if(r&&(r.code==="cancelled"||r.name==="AbortError")) return; logErr(r,"未預期錯誤（非同步）"); });
@@ -3612,23 +3653,26 @@ function dayItem(w,opt){
     w.st!=="done"&&w.month&&w.month<todayISO().slice(0,7)?`<span class="mini">${+w.month.slice(5)}月轉入</span>`:"",
     w.auto?`<span class="mini ${w.projD<todayISO()?"warn":""}" title="上次完工日＋週期自動推算；改排日期即改為手動排定，完工匯入後後續自動重算">自動預排 ${esc(fmtD(w.projD).slice(5))}${w.projD<todayISO()?" · 已過預排":""}</span>`:""].join("");
   const act=ro||w.noWo?"":w.st==="done"?(w.doneManual?`<button class="btn ghost sm" data-mundo="${esc(w.wo)}">取消回報</button>`:"")
-    :`<button class="btn sm ok" data-mdone="${esc(w.wo)}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 8.5 3 3 7-7"/></svg>完工</button>${w.sched?`<button class="btn ghost sm" data-ret="${esc(w.wo)}">退工</button>`:""}<button class="btn ghost sm" data-mat="${esc(w.wo)}">${w.wm?"料已到":"待料"}</button><button class="btn ghost sm" data-pz="${esc(w.wo)}">${w.holdR&&w.holdR.wt?"解除暫緩":"暫緩"}</button><button class="btn ghost sm del" data-del="${esc(w.wo)}" title="刪除這張工單（需填原因）">刪除</button>`;
-  const dateIn=w.st==="done"?"":`<label class="d-date"><span>${w.sched?"排定":w.auto?"預排":"排入"}</span><input type="date" data-sd="${esc(w.wo)}" value="${w.sched||(w.auto?w.projD:"")}" class="${w.late||w.early?"late":""} ${!w.sched&&w.auto?"auto":""}" ${w.start?`min="${w.start}"`:""} aria-label="排定日期 ${esc(w.wo)}" ${!w.sched&&w.auto?`title="自動預排：上次完工＋週期推算。改日期即改為手動排定"`:""} ${ro?"disabled":""}></label>`;
-  return `<div class="dw st-${w.st}" data-sw="${esc(w.wo||"")}" data-st="${esc(w.tail||"")}" data-sc="${esc(cardOf(w)+" "+(w.title||""))}" data-sdue="${esc(w.hardD||w.effDue||w.due||"")}" data-ssd="${esc(w.sched||(w.auto?w.projD:"")||"")}"${opt.tail?" data-sx":""}>
+    :`<button class="btn sm ok" data-qdone="${esc(w.wo)}" title="一鍵回報完工（日期＝${esc(fmtD(qDoneDate(w)).slice(5))}）"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 8.5 3 3 7-7"/></svg>完工</button><button class="btn ghost sm more" data-more="${esc(w.wo)}" title="退工、待料、暫緩、改到期日、刪除…" aria-label="更多動作">⋯</button>`;
+  const pd=w.sched||(w.auto?w.projD:"");
+  const dateIn=w.st==="done"?"":ro?(pd?`<span class="days">${w.sched?"排定":"預排"} ${esc(fmtD(pd).slice(5))}</span>`:""):`<button class="btn sm pick ${!w.sched&&w.auto?"auto":""} ${w.late||w.early?"late":""}" data-pick="${esc(w.wo)}" title="${!w.sched&&w.auto?"自動預排（上次完工＋週期）。點選改期即改為手動排定":"點選改期"}">${pd?`${w.sched?"排定":"預排"} ${esc(fmtD(pd).slice(5))}`:"排日期"} ▾</button>`;
+  return `<div class="dw st-${w.st}" data-sw="${esc(w.wo||"")}" data-stail="${esc(w.tail||"")}" data-sc="${esc(cardOf(w)+" "+(w.title||""))}" data-sdue="${esc(w.hardD||w.effDue||w.due||"")}" data-ssd="${esc(w.sched||(w.auto?w.projD:"")||"")}"${opt.tail?" data-sx":""}>
     <div class="dw-l"><span class="pill ${w.auto&&w.vs==="sched"?"c-sched":s.c}">${w.auto&&w.vs==="sched"?"自動預排":s.t}</span>${opt.tail?`<span class="mono dw-tail">${esc(w.tail)}</span>`:""}</div>
     <div class="dw-m"><div class="dw-t"><b class="mono">${esc(cardOf(w))}</b>${procOf(w)?`<span class="mini" title="工單內容（Procedure）">Procedure ${esc(procOf(w))}</span>`:""}<span class="t">${esc(w.title||"")}</span></div>
-      <div class="dw-s"><button class="wo-link mono dw-wo" data-hist="${esc(w.wo)}" title="查看這張工單的異動歷程">${w.noWo?"無 WO":"WO "+esc(w.wo)}</button>${w.serial&&w.serial!==w.tail?`<span class="mono days">S/N ${esc(w.serial)}</span>`:""}<span class="days ${dl}">${esc(dueTxt(w))}${w.dueBy==="manual"?"（手動）":""}</span>${!w.noWo&&w.st!=="done"&&w.st!=="queue"&&!ro?`<button class="due-ed" data-due="${esc(w.wo)}" title="修改起始日／到期日（FH/FC 變動時）">✎</button>`:""}${w.sched&&opt.showSched?`<span class="days">排定 ${esc(dayLabel(w.sched))}</span>`:""}${w.st==="done"&&w.doneDate?`<span class="days">完工 ${esc(fmtD(w.doneDate).slice(5))}</span>`:""}${tags}<input class="note dw-note" data-nt="${esc(w.wo)}" value="${esc(w.note)}" placeholder="＋ 計畫備註" aria-label="計畫備註 ${esc(w.wo)}" ${ro?"disabled":""}></div></div>
+      <div class="dw-s"><button class="wo-link mono dw-wo" data-hist="${esc(w.wo)}" title="查看這張工單的異動歷程">${w.noWo?"無 WO":"WO "+esc(w.wo)}</button>${w.serial&&w.serial!==w.tail?`<span class="mono days">S/N ${esc(w.serial)}</span>`:""}<span class="days ${dl}">${esc(dueTxt(w))}${w.dueBy==="manual"?"（手動）":""}</span>${w.sched&&opt.showSched?`<span class="days">排定 ${esc(dayLabel(w.sched))}</span>`:""}${w.st==="done"&&w.doneDate?`<span class="days">完工 ${esc(fmtD(w.doneDate).slice(5))}</span>`:""}${tags}<input class="note dw-note" data-nt="${esc(w.wo)}" value="${esc(w.note)}" placeholder="＋ 計畫備註" aria-label="計畫備註 ${esc(w.wo)}" ${ro?"disabled":""}></div></div>
     <div class="dw-a">${dateIn}${act}</div></div>`;
 }
 
 /* STAYOVER CHECK: a daily walk-round on every aircraft — no WO (not issued by 修管). TPE, RMQ and KHH are all home bases: every day */
 const STY_RE=/-050000-(?:00000-)?1C-/;
+let styEvC=null, styEvK=null;
+function styEvs(){ const CD=derive().cardDone; if(styEvK===CD) return styEvC; const o={}; for(const [k,L] of Object.entries(CD)){ if(!STY_RE.test(k)) continue; const t=k.split("|")[0]; (o[t]=o[t]||[]).push(...L); } styEvK=CD; styEvC=o; return o; }
 function styList(D){
   const {all,shortRows,hmvOn}=derive(); const tails=new Set(all.filter(w=>!w.adhoc).map(w=>w.tail)); Object.values(M.short||{}).forEach(sd=>tails.add(sd.tail));
   const day=(M.daily||{})[safeKey(D)]||{};
   return [...tails].filter(t=>t&&/^B-\d{5}$/.test(t)&&(!ui.dayType||typeOf(t)===ui.dayType)&&(!ui.dayTail||t===ui.dayTail)&&!hmvOn[t]).sort().map(t=>{
-    const r=shortRows.find(x=>x.tail===t&&STY_RE.test(String(x.it.task||""))); const x=stintAt(t,D); const CD=derive().cardDone;
-    const evs=Object.entries(CD).filter(([k])=>k.startsWith(t+"|")&&STY_RE.test(k)).flatMap(([,L])=>L);
+    const r=shortRows.find(x=>x.tail===t&&STY_RE.test(String(x.it.task||""))); const x=stintAt(t,D);
+    const evs=styEvs()[t]||[];
     const ev=evs.filter(c=>c.date===D).sort((a,b)=>String(a.wo).localeCompare(String(b.wo)))[0]||null;
     // the completion file wins over a manual tick: it carries the WO 修管 issued for the STY
     const mark=ev?{by:"",at:"",file:ev.file,wo:ev.wo,ev:true,prev:((day.sty||{})[t]||{}).prev}:(day.sty||{})[t]||null; let last=r?r.last:""; if(mark&&(!last||last<D)) last=D;
@@ -3643,7 +3687,7 @@ function styItem(s){
   return `<div class="dw dw-sty ${s.mark?"st-done":""}">
     <div class="dw-l"><span class="pill ${s.mark?"c-done":"c-routine"}">${s.mark?"已執行":"每日例行"}</span></div>
     <div class="dw-m"><div class="dw-t"><b class="mono">${esc(s.task||"STY")}</b><span class="t">AIRCRAFT STAYOVER CHECK</span></div>
-      <div class="dw-s"><span class="days">STY · 無 WO · 修管不發工</span><span class="mini">${esc(s.stn||"TPE")} 每日</span><span class="days">上次 ${s.last?esc(fmtD(s.last).slice(5)):"—"}</span>${s.mark?(s.mark.ev?`<span class="mini">完工檔確認 · WO ${esc(s.mark.wo)}</span>`:`<span class="days">✓ ${esc(who(s.mark.by))} ${esc(fmtT(s.mark.at).slice(11))}</span>`):""}</div></div>
+      <div class="dw-s"><span class="mini">${esc(s.stn||"TPE")} 每日</span><span class="days">上次 ${s.last?esc(fmtD(s.last).slice(5)):"—"}</span>${s.mark?(s.mark.ev?`<span class="mini">完工檔確認 · WO ${esc(s.mark.wo)}</span>`:`<span class="days">✓ ${esc(who(s.mark.by))} ${esc(fmtT(s.mark.at).slice(11))}</span>`):""}</div></div>
     <div class="dw-a">${canMark&&!(s.mark&&s.mark.ev)?(s.mark?`<button class="btn ghost sm" data-sty="${esc(s.tail)}" data-on="0">取消</button>`:`<button class="btn sm ok" data-sty="${esc(s.tail)}" data-on="1"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 8.5 3 3 7-7"/></svg>已執行</button>`):""}</div></div>`;
 }
 /* 注意事項 — daily notices per aircraft (CAA 查核、公關拍攝、加油規定…), stored in daily/<date>.notices */
@@ -3664,7 +3708,7 @@ function noticeBlock(D){
 function routineList(D){
   const {shortRows,hmvOn}=derive(); const day=(M.daily||{})[safeKey(D)]||{}; const T=todayISO();
   // routine items (修管不發工) plus short-interval items whose current cycle has no WO in the plans (修管沒放進月計畫): both planned straight from the cycle
-  const noWoRow=r=>!r.it.routine&&!r.cur&&!r.cancelled&&!!r.last&&!STY_RE.test(String(r.it.task||""))&&(r.byInt?+r.it.limitDays:+r.it.cycle)>0;
+  const noWoRow=r=>!r.it.routine&&!r.cur&&!r.cancelled&&(!!r.last||r.planBy==="first")&&!STY_RE.test(String(r.it.task||""))&&(r.byInt?+r.it.limitDays:+r.it.cycle)>0;
   return shortRows.filter(r=>(r.it.routine||noWoRow(r))&&/^B-\d{5}$/.test(r.tail)&&!hmvOn[r.tail]&&(!ui.dayType||typeOf(r.tail)===ui.dayType)&&(!ui.dayTail||r.tail===ui.dayTail)).map(r=>{
     const k=r.tail+"|"+r.key; const T_=String(r.it.task||"").trim().toUpperCase();
     const evs=(derive().cardDone[r.tail+"|"+T_]||[]); const ev=evs.find(c=>c.date===D);
@@ -3709,8 +3753,8 @@ function routineItem(x){
   return `<div class="dw dw-sty dw-rt ${x.mark?"st-done":""}">
     <div class="dw-l"><span class="pill ${x.mark?"c-done":x.st==="over"?"c-over":"c-routine"}">${x.mark?"已執行":x.st==="over"?"已逾期":x.nw?"無 WO":"例行"}</span></div>
     <div class="dw-m"><div class="dw-t"><b class="mono">${esc(x.r.it.task)}</b><span class="t">${esc(x.r.it.desc||"")}</span></div>
-      <div class="dw-s">${x.nw?`<span class="mini long">短天期</span><span class="days">無 WO · 月計畫沒有這期 WO（完工後帶入 WO）</span>`:`<span class="days">無 WO · 修管不發工</span>`}${x.r.it.serial?`<span class="mono days">S/N ${esc(x.r.it.serial)}</span>`:""}<span class="mini">${x.nw&&x.r.byInt?"依 INTERVAL":`每 ${esc(x.r.it.cycle)} 天`} · INTERVAL ${esc(x.r.it.limitDays||"—")} 天</span><span class="days">上次 ${x.last?esc(fmtD(x.last).slice(5)):"—（請回報第一次）"}</span>${x.nw&&x.plan?`<span class="days">預排 ${esc(fmtD(x.plan).slice(5))}${x.r.planBy==="manual"?" ✎":x.r.planWas&&x.plan===x.r.planFl?(x.r.planSame?"（晚過夜，跨 "+fmtD(x.r.planWas).slice(5)+"）":"（依航班提前）"):""}</span>`:""}${x.due?(x.away&&!x.mark&&lt<0?`<span class="days">DUE ${esc(fmtD(x.due).slice(5))} · 飛機在歐美未回則不執行，回 TPE 後執行</span>`:`<span class="days ${lt<0?"neg":lt<=1?"soon":""}">DUE ${esc(fmtD(x.due).slice(5))}${x.mark?"":lt<0?` · 逾 ${-lt} 天`:lt===0?" · 今天到期":` · 剩 ${lt} 天`}</span>`):""}${x.mark?(x.mark.ev?`<span class="mini">完工檔確認 · WO ${esc(x.mark.wo)}</span>`:`<span class="days">✓ ${esc(who(x.mark.by))} ${esc(fmtT(x.mark.at).slice(11))}</span>`):""}</div></div>
-    <div class="dw-a">${canWrite!==false&&!(x.mark&&x.mark.ev)?`<label class="d-date" title="實際執行日不同時直接改，後續預排會從這天重算"><span>上次執行</span><input type="date" data-sl="${esc(x.r.tail)}|${esc(x.r.key)}" value="${esc(x.r.it.lastDone||"")}" max="${todayISO()}" aria-label="上次執行 ${esc(x.r.it.task)}"></label>`:""}${canMark&&!(x.mark&&x.mark.ev)?(x.mark?`<button class="btn ghost sm" data-rt="${esc(x.k)}" data-on="0">取消</button>`:`<button class="btn sm ok" data-rt="${esc(x.k)}" data-on="1"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 8.5 3 3 7-7"/></svg>已執行</button>`):""}</div></div>`;
+      <div class="dw-s">${x.nw?`<span class="mini long" title="月計畫沒有這期 WO；完工後由完工檔帶入 WO">短天期 · 無 WO</span>`:`<span class="mini" title="修管不發工">例行</span>`}${x.r.it.serial?`<span class="mono days">S/N ${esc(x.r.it.serial)}</span>`:""}<span class="mini">${x.nw&&x.r.byInt?"依 INTERVAL":`每 ${esc(x.r.it.cycle)} 天`} · INTERVAL ${esc(x.r.it.limitDays||"—")} 天</span><span class="days">上次 ${x.last?esc(fmtD(x.last).slice(5)):"—（請回報第一次）"}</span>${x.nw&&x.plan?`<span class="days">預排 ${esc(fmtD(x.plan).slice(5))}${x.r.planBy==="manual"?" ✎":x.r.planWas&&x.plan===x.r.planFl?(x.r.planSame?"（晚過夜，跨 "+fmtD(x.r.planWas).slice(5)+"）":"（依航班提前）"):""}</span>`:""}${x.due?(x.away&&!x.mark&&lt<0?`<span class="days">DUE ${esc(fmtD(x.due).slice(5))} · 飛機在歐美未回則不執行，回 TPE 後執行</span>`:`<span class="days ${lt<0?"neg":lt<=1?"soon":""}">DUE ${esc(fmtD(x.due).slice(5))}${x.mark?"":lt<0?` · 逾 ${-lt} 天`:lt===0?" · 今天到期":` · 剩 ${lt} 天`}</span>`):""}${x.mark?(x.mark.ev?`<span class="mini">完工檔確認 · WO ${esc(x.mark.wo)}</span>`:`<span class="days">✓ ${esc(who(x.mark.by))} ${esc(fmtT(x.mark.at).slice(11))}</span>`):""}</div></div>
+    <div class="dw-a">${canWrite!==false&&x.nw&&!x.mark?`<button class="btn sm pick ${x.r.planBy==="manual"?"":"auto"}" data-spick="${esc(x.r.tail)}|${esc(x.r.key)}" title="${x.r.planBy==="manual"?"手動預排":"自動預排（上次執行＋週期）"}。點選改期">${x.plan?`預排 ${esc(fmtD(x.plan).slice(5))}`:"排日期"} ▾</button>`:""}${canMark&&!(x.mark&&x.mark.ev)?(x.mark?`<button class="btn ghost sm" data-rt="${esc(x.k)}" data-on="0">取消</button>`:`<button class="btn sm ok" data-rt="${esc(x.k)}" data-on="1"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 8.5 3 3 7-7"/></svg>已執行</button>`):""}${canWrite!==false&&!(x.mark&&x.mark.ev)?`<button class="btn ghost sm more" data-rmore="${esc(x.r.tail)}|${esc(x.r.key)}" aria-label="更多動作" title="修改上次執行日${x.nw?"、改回自動預排":""}">⋯</button>`:""}</div></div>`;
 }
 function flHead(t,D){ const mxh=mxOn(t,D).map(b=>`<span class="mini fl-ok" title="管制台月計畫${b.info?"："+esc(b.info):""}">${esc(mxLabel(b))}</span>`).join(""); return mxh+flHead0(t,D); }
 function flHead0(t,D){ if(!flCovers(t,D)) return ""; const W=flWins(t,D).filter(x=>x.kind!=="turn"); const r=flTrip(t,D);
@@ -3721,8 +3765,24 @@ function dayGroups(L,opt){ // grouped by aircraft
   return Object.keys(g).sort().map(t=>{ const x=stintAt(t,D); const h=derive().hmvOn[t];
     const rk=w=>w.sty?0:w.rt?1:w.ev?2:3; const ws=g[t].sort((a,b)=>rk(a)-rk(b)||ST[a.st].o-ST[b.st].o||cmpDue(a,b)); const dn=ws.filter(w=>w.st==="done").length;
     const nts=NS.filter(n=>(n.tails||[]).some(x=>x===t||x===typeOf(t)));
-    return `<div class="dg"><div class="dg-h"><span class="tail-reg">${esc(t)}</span><span class="tail-type">${esc(typeOf(t))}</span>${x?`<span class="mini">${esc(x.station)} ${esc(fmtD(x.start).slice(5))}–${esc(fmtD(x.end).slice(5)||"?")}</span>`:""}${h?`<span class="mini hmvt">HMV</span>`:""}${flHead(t,D)}<span class="dg-n">${opt&&opt.progress?`完成 <b>${dn}</b> / ${ws.length}`:`<b>${ws.length}</b> 張`}</span></div>${nts.map(n=>`<div class="dg-note">📌 ${n.time?`<b class="mono">${esc(n.time)}</b> `:""}${esc(n.text)}</div>`).join("")}${ws.map(w=>w.sty?styItem(w):w.rt?routineItem(w):w.ev?evItem(w):dayItem(w,opt)).join("")}</div>`; }).join("");
+    return `<div class="dg"><div class="dg-h"><span class="tail-reg">${esc(t)}</span><span class="tail-type">${esc(typeOf(t))}</span>${x?`<span class="mini">${esc(x.station)} ${esc(fmtD(x.start).slice(5))}–${esc(fmtD(x.end).slice(5)||"?")}</span>`:""}${h?`<span class="mini hmvt">HMV</span>`:""}${flHead(t,D)}<span class="dg-n">${opt&&opt.progress?`完成 <b>${dn}</b> / ${ws.length}`:`<b>${ws.length}</b> 張`}</span></div>${nts.map(n=>`<div class="dg-note">📌 ${n.time?`<b class="mono">${esc(n.time)}</b> `:""}${esc(n.text)}</div>`).join("")}${(()=>{ const one=w=>w.sty?styItem(w):w.rt?routineItem(w):w.ev?evItem(w):dayItem(w,opt);
+      if(!(opt&&opt.progress)||!dn) return ws.map(one).join("");
+      /* 已完工先收合（點開或搜尋時才畫出來），畫面短、也比較快 */
+      const k="g"+(++DGN); DGDONE[k]=()=>ws.filter(w=>w.st==="done").map(one).join("");
+      return ws.filter(w=>w.st!=="done").map(one).join("")+`<button class="dg-done" data-dgdone="${k}">✓ 已完工 ${dn} 項 ▸</button><div class="dg-donebox" data-dgbox="${k}" hidden></div>`; })()}</div>`; }).join("");
 }
+let DGDONE={}, DGN=0;
+function openDgDone(k,force){ const box=document.querySelector(`[data-dgbox="${k}"]`), b=document.querySelector(`[data-dgdone="${k}"]`); if(!box||!b) return;
+  const show=force!=null?force:box.hidden; if(show&&!box.dataset.f&&DGDONE[k]){ box.innerHTML=DGDONE[k](); box.dataset.f="1"; }
+  box.hidden=!show; b.textContent=b.textContent.replace(/[▸▾]$/,show?"▾":"▸"); }
+document.addEventListener("click",e=>{ const b=e.target.closest("[data-dgdone]"); if(b){ e.preventDefault(); openDgDone(b.dataset.dgdone); } });
+/* 今日排定內搜尋：打機號、卡號、WO 或工作名稱，只留符合的；已完工也會一起找出來 */
+function applyDayFind(){ const q=String(ui.dayFind||"").trim().toUpperCase(); const sec=document.getElementById("kDay"); if(!sec) return;
+  if(q) sec.querySelectorAll("[data-dgdone]").forEach(b=>openDgDone(b.dataset.dgdone,true));
+  let n=0; sec.querySelectorAll(".dg").forEach(g=>{ const tail=(g.querySelector(".tail-reg")||{}).textContent||""; let any=false;
+    g.querySelectorAll(".dw").forEach(r=>{ const ok=!q||(tail+" "+r.textContent).toUpperCase().includes(q); r.hidden=!ok; if(ok){ any=true; n++; } });
+    g.hidden=!!q&&!any; });
+  const c=document.getElementById("dFindN"); if(c) c.textContent=q?`符合 ${n} 項`:""; }
 // 航班更新提醒 (今日控管): built from the shared data, so both planners see the same thing — the live conflicts after the latest
 // flight file, and what that import moved (kept in the shared import log). "我已看過" is only a per-viewer marker.
 function flBoard(){
@@ -3747,7 +3807,7 @@ function renderDay(force){
   const el=$("#secDay"); if(!el||ui.view!=="day") return;
   const a=document.activeElement; if(!force&&a&&a.closest&&a.closest("#secDay")&&a.matches("input")){ pendingDay=true; return; }
   pendingDay=false;
-  const {all}=derive(); const T=todayISO(); const D=ui.day||T; const isT=D===T;
+  const {all}=derive(); const T=todayISO(); const D=ui.day||T; const isT=D===T; DGDONE={};
   if(ui.dayTail&&ui.dayType&&typeOf(ui.dayTail)!==ui.dayType) ui.dayTail="";
   const inT=w=>(!ui.dayType||w.type===ui.dayType)&&(!ui.dayTail||w.tail===ui.dayTail);
   const A=all.filter(inT);
@@ -3791,18 +3851,18 @@ function renderDay(force){
       ${ui.dayType?`<div class="fleet-tabs d-tails"><button class="chip ${!ui.dayTail?"on":""}" data-dtail="">全部 ${esc(ui.dayType)}</button>${tailChips}</div>`:""}</div>
     ${ago!=null&&ago>3?`<div class="d-warn">完工檔最後匯入是 ${ago} 天前（${esc(fmtD(localDay(ld)).slice(5))}）。「排定已過未完工」可能包含其實已完工的工單；可逐張按「完工」回報，或匯入最新完工檔。</div>`:""}
     <div class="d-week" aria-label="未來 7 天排程">${wk.map(([d,n,dn,tl,nn])=>`<button class="dd ${d===D?"on":""}" data-dday="${d}"><span class="dd-d">${esc(dayLabel(d))}${nn?`<span class="dd-nt">📌${nn}</span>`:""}</span><span class="dd-bar"><i style="width:${Math.round(n/mx*100)}%"></i></span><span class="dd-n"><b>${n}</b> 張 · ${tl} 架${dn?` · 完工 ${dn}`:""}</span></button>`).join("")}</div>
-    <div class="d-kpi">${kp.map(([id,t,n,note,c])=>`<button class="stat ${c}" data-djump="${id}"><span class="lbl">${t}</span><span class="num">${n}</span><span class="note">${note}</span></button>`).join("")}</div>
+    <div class="d-kpi">${kp.map(([id,t,n,note,c])=>`<button class="stat ${c}" ${id==="kRet"?`data-view="ret"`:`data-djump="${id}"`}><span class="lbl">${t}</span><span class="num">${n}</span><span class="note">${note}</span></button>`).join("")}</div>
     ${(()=>{ const fb=flBoard(); return fb?sec("kFl",`✈ 航班更新提醒${fb.isNew?" <span class=\"mini warn\">新</span>":""}`,fb.hint,fb.body,fb.n,fb.open):""; })()}
     ${sec("kStnB","駐站一覽",`${isT?"今天":dayLabel(D)}在外站的飛機、7 天內進出站，與前後 5 週時程；點機號只看那架`,sb.head+sb.tl,sb.n,true)}
     ${sec("kNote","注意事項",`${isT?"今日":dayLabel(D)}的臨時事項：CAA 查核、公關拍攝、加油規定、SD Card…可自行輸入或貼信件截圖帶入`,nb.html,nb.n,true)}
-    ${sec("kDay",(isT?"今日":dayLabel(D))+"排定工作","依機號分組；每架含 STAYOVER CHECK 與例行短天期（無 WO，依週期出現）。按「完工／已執行」回報，或直接改排定日期",dayGroups([...sty,...rts,...evs,...onDay],{progress:true}),`${onDay.length} 張 + STY ${sty.length} + 例行 ${rts.length}`,true)}
+    ${sec("kDay",(isT?"今日":dayLabel(D))+"排定工作","依機號分組；每架含 STAYOVER CHECK 與例行短天期（無 WO，依週期出現）。按「完工／已執行」回報，或點日期改期",`<div class="d-find"><input id="dFind" type="search" placeholder="在這天的工作中搜尋：機號、卡號、WO…（含已完工）" value="${esc(ui.dayFind||"")}"><span id="dFindN" class="muted" style="font-size:12.5px"></span></div>`+dayGroups([...sty,...rts,...evs,...onDay],{progress:true}),`${onDay.length} 張 + STY ${sty.length} + 例行 ${rts.length}`,true)}
     ${sec("kPast","排定日已過、尚未完工","完工檔未匯入、退工或延後？逐張確認",pastBody,past.length,past.length<=40)}
     ${sec("kNeed","逾期／快屆期","依到期日排序；未排定的請排入日期",lim(need,150).map(w=>dayItem(w,{tail:true,showSched:true})).join("")+(need.length>150?`<div class="empty sm">只列前 150 張，請選機型縮小範圍</div>`:""),need.length,need.length<=40)}
-    ${sec("kRet","退工待重排","現場退回、還沒有重新排定",retP.map(w=>dayItem(w,{tail:true})).join(""),retP.length,retP.length>0&&retP.length<=20)}
     ${sec("kPz","⏸ 暫緩／待澄清",`工單保留、暫不安排：待修管通知、評估併 HMV、退工待澄清。${pzNear.length?`<b class="neg">${pzNear.length} 張到追蹤日或 7 天內到期，請向修管確認</b>`:"依到期日排序"}`,pz.map(w=>dayItem(w,{tail:true})).join(""),pz.length,pzNear.length>0)}
     ${sec("kMat","⏳ 待料（缺料延期）","依預計料到日排序；料到後按「料已到」排入日期。點待料標籤可修改料到日",mat.map(w=>dayItem(w,{tail:true,showSched:true})).join(""),mat.length,mat.length>0&&mat.length<=30)}
     ${sec("kStn","駐 RMQ／KHH，需回 TPE 執行","駐站期間到期、備註未標可在 RMQ／KHH 執行",stn.map(w=>dayItem(w,{tail:true,showSched:true})).join(""),stn.length,false)}`;
   const pk=$("#dPick"); if(pk) pk.onchange=e=>{ if(e.target.value){ ui.day=e.target.value; renderDay(); } };
+  const fd=$("#dFind"); if(fd){ fd.oninput=()=>{ ui.dayFind=fd.value; applyDayFind(); }; if(ui.dayFind) applyDayFind(); }
   const ex=$("#dExport"); if(ex) ex.onclick=()=>exportDay(D);
 }
 /* notice dialog: type in, or let Claude read an e-mail screenshot / pasted text */
@@ -4184,6 +4244,83 @@ async function manualDoneDlg(wo){
   d.querySelector("[data-y]").onclick=async()=>{ const v=d.querySelector("#mdDate").value; if(!v) return; closeDlg();
     await B.setManualDone(wo,v); B.audit({act:"回報完工",wo,tail:w.tail,to:v}); invalidate(); render(); toast(`${wo} 已回報完工`); };
 }
+
+
+/* ---------- 退工：獨立頁面，一張退工一張小卡（11/3） ---------- */
+function renderRet(){
+  const el=$("#secRet"); if(!el) return; if(ui.view!=="ret"){ el.innerHTML=""; return; }
+  const A=derive().all, byWo={}; A.forEach(w=>{ byWo[w.wo]=w; }); const T=todayISO();
+  const last={}; recList("returns").forEach(r=>{ if(r.wo&&!last[r.wo]) last[r.wo]=r; });
+  const q=String(ui.retQ||"").trim().toUpperCase(), ty=ui.retType||"";
+  const L=Object.values(last).map(r=>({r,w:byWo[r.wo]||null})).filter(({r,w})=>{ const t=w?w.type:r.type||typeOf(r.tail);
+    if(ty&&t!==ty) return false; if(!q) return true; return [r.tail,r.wo,r.card,r.title,r.reason,r.note,r.clarText,w&&w.title,w&&cardOf(w)].join(" ").toUpperCase().includes(q); });
+  const open=x=>x.w&&x.w.st!=="done"&&!x.r.closed;
+  const G={pend:[],wait:[],track:[],done:[]};
+  for(const x of L){ if(!open(x)) G.done.push(x); else if(clarWait(x.r)) G.wait.push(x); else if(x.w.sched) G.track.push(x); else G.pend.push(x); }
+  const byDate=(a,b)=>String(b.r.date||"").localeCompare(String(a.r.date||""));
+  G.pend.sort((a,b)=>cmpDue(a.w,b.w)); G.wait.sort(byDate); G.track.sort((a,b)=>String(a.w.sched).localeCompare(String(b.w.sched))); G.done.sort(byDate);
+  const card=({r,w})=>{ const fu=(r.follow||[]).slice(-1)[0]; const note=fu?`${fmtD(fu.date).slice(5)} ${fu.party?fu.party+"：":""}${fu.note||""}`:(r.note||"");
+    const due=w&&w.st!=="done"?(w.hardD||w.effDue||""):""; const lt=due?daysBetween(T,due):null;
+    const ro=canWrite===false;
+    return `<div class="rc">
+      <div class="rc-h"><span class="tail-reg">${esc(r.tail||(w&&w.tail)||"")}</span><span class="tail-type">${esc(w?w.type:r.type||"")}</span><span class="rc-d">退工 ${esc(fmtD(r.date||"").slice(5))}</span></div>
+      <div class="rc-c">${esc(r.card||(w&&cardOf(w))||"")} <button class="wo-link mono" data-hist="${esc(r.wo)}" style="font-weight:400;font-size:12px">WO ${esc(r.wo)}</button></div>
+      <div class="rc-t" title="${esc(r.title||(w&&w.title)||"")}">${esc(r.title||(w&&w.title)||"")}</div>
+      <div class="rc-tags"><span class="mini warn">${esc(r.reason||"未填原因")}</span>${clarWait(r)?`<span class="mini">${esc(r.clarText||CLAR[r.clar]||"")}</span>`:""}${w&&w.sched&&w.st!=="done"?`<span class="mini">排定 ${esc(fmtD(w.sched).slice(5))}</span>`:""}${due?`<span class="mini ${lt<0?"warn":""}">DUE ${esc(fmtD(due).slice(5))}${lt<0?` 逾 ${-lt} 天`:` 剩 ${lt} 天`}</span>`:""}${w&&w.st==="done"?`<span class="mini">已完工 ${esc(fmtD(w.doneDate||"").slice(5))}</span>`:""}${!w?`<span class="mini">工單已不在計畫中</span>`:""}</div>
+      ${note?`<div class="rc-n" title="${esc(note)}">${esc(note)}</div>`:""}
+      ${ro?"":`<div class="rc-a">${open({r,w})?`<button class="btn sm pick" data-pick="${esc(r.wo)}">${w.sched?"排定 "+esc(fmtD(w.sched).slice(5)):"排日期"} ▾</button><button class="btn sm ok" data-qdone="${esc(r.wo)}">✓ 完工</button>`:""}<button class="btn ghost sm" data-follow="${esc(r.id)}">更新進度</button>${open({r,w})?`<button class="btn ghost sm more" data-more="${esc(r.wo)}" aria-label="更多動作">⋯</button>`:""}</div>`}
+    </div>`; };
+  const sec=(k,t,L,lazy)=>`<div class="rc-sec"><h3>${t}<span class="ct">${L.length}</span>${lazy&&L.length?`<button class="btn ghost sm" data-rcshow="${k}">${ui.retShow===k?"收合":"展開"}</button>`:""}</h3>${L.length?(lazy&&ui.retShow!==k?"":`<div class="rc-grid">${L.map(card).join("")}</div>`):`<div class="empty sm">沒有項目</div>`}</div>`;
+  const types=typeOrder().filter(t=>Object.values(last).some(r=>(byWo[r.wo]?byWo[r.wo].type:r.type)===t));
+  el.innerHTML=`<div class="rc-bar"><div class="fleet-tabs"><button class="chip ${!ty?"on":""}" data-rcty="">全機隊</button>${types.map(t=>`<button class="chip ${ty===t?"on":""}" data-rcty="${esc(t)}">${esc(t)}</button>`).join("")}</div>
+      <input id="rcQ" type="search" placeholder="搜尋機號、卡號、WO、原因…" value="${esc(ui.retQ||"")}"><span style="flex:1"></span>${canWrite!==false?`<button class="btn" data-retimp>匯入退工</button>`:""}</div>
+    ${sec("pend","待重排",G.pend)}${sec("wait","待澄清（等工程／修管回覆）",G.wait)}${sec("track","已重排、待完工",G.track)}${sec("done","已完工／結案",G.done.slice(0,120),true)}`;
+  const qi=$("#rcQ"); if(qi){ qi.oninput=()=>{ ui.retQ=qi.value; clearTimeout(qi._t); qi._t=setTimeout(()=>{ renderRet(); const n=$("#rcQ"); if(n){ n.focus(); n.setSelectionRange(n.value.length,n.value.length); } },250); }; }
+}
+document.addEventListener("click",e=>{
+  const t=e.target.closest("[data-rcty]"); if(t){ ui.retType=t.dataset.rcty; renderRet(); return; }
+  const s=e.target.closest("[data-rcshow]"); if(s){ ui.retShow=ui.retShow===s.dataset.rcshow?"":s.dataset.rcshow; renderRet(); return; }
+  const i=e.target.closest("[data-retimp]"); if(i){ openRetImport(); return; }
+});
+/* ---------- 11/3 精簡操作：一鍵完工、點日期改期、⋯ 更多選單 ---------- */
+function qDoneDate(w){ const T=todayISO(), D=ui.view==="day"&&ui.day&&ui.day<T?ui.day:T; return w.sched&&w.sched<D?w.sched:D; }
+let POP=null;
+function closePop(){ if(POP){ POP.remove(); POP=null; } }
+function openPop(anchor,html){ closePop(); const p=document.createElement("div"); p.className="pop"; p.innerHTML=html; document.body.appendChild(p); POP=p;
+  const r=anchor.getBoundingClientRect(), pw=p.offsetWidth, ph=p.offsetHeight; let x=r.right+scrollX-pw, y=r.bottom+scrollY+4;
+  if(x<scrollX+8) x=scrollX+8; if(r.bottom+ph+8>innerHeight&&r.top-ph-4>0) y=r.top+scrollY-ph-4; p.style.left=x+"px"; p.style.top=y+"px"; return p; }
+document.addEventListener("click",e=>{ if(POP&&!e.target.closest(".pop")&&!e.target.closest("[data-pick],[data-spick],[data-more],[data-rmore]")) closePop(); },true);
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&POP) closePop(); });
+function dayLoads(type){ const T=todayISO(), A=derive().all, o={}; for(let i=0;i<10;i++){ const d=addDays(T,i); o[d]=A.filter(w=>(!type||w.type===type)&&onDate(w,d,T)).length; } return o; }
+/* 改期小視窗：今天起 10 天一鍵選，另有其他日期與清除 */
+function datePop(anchor,o){ const T=todayISO(), L=dayLoads(o.type), wd="日一二三四五六";
+  const btns=Object.keys(L).map((d,i)=>{ const late=o.limit&&d>o.limit; return `<button data-pd="${d}" class="${d===o.cur?"on":""} ${late?"late":""}" title="${late?"超過 DUE ":""}${esc(fmtD(d))}"><span>${i===0?"今天":i===1?"明天":""} ${+d.slice(5,7)}/${+d.slice(8)}（${wd[new Date(d+"T00:00:00").getDay()]}）</span><span class="n">${L[d]} 張</span></button>`; }).join("");
+  const p=openPop(anchor,`<div class="pop-t">${esc(o.title||"改排定日")}${o.limit?` · DUE ${esc(fmtD(o.limit).slice(5))}`:""}</div><div class="pop-days">${btns}</div>
+    <div class="pop-row"><input type="date" data-pdin value="${esc(o.cur||"")}" ${o.min?`min="${o.min}"`:""}><button class="btn sm" data-pdok>確定</button>${o.clear?`<button class="btn ghost sm" data-pdclr>${esc(o.clear)}</button>`:""}</div>`);
+  p.querySelectorAll("[data-pd]").forEach(b=>b.onclick=()=>{ closePop(); o.pick(b.dataset.pd); });
+  p.querySelector("[data-pdok]").onclick=()=>{ const v=p.querySelector("[data-pdin]").value; if(!v) return; closePop(); o.pick(v); };
+  const c=p.querySelector("[data-pdclr]"); if(c) c.onclick=()=>{ closePop(); o.pick(""); }; }
+async function quickDone(wo){ const w=derive().all.find(x=>x.wo===wo); if(!w) return; const d=qDoneDate(w);
+  await B.setManualDone(wo,d); B.audit({act:"回報完工",wo,tail:w.tail,to:d}); invalidate(); render();
+  toast(`${w.tail} ${cardOf(w)||wo} 已完工 ${fmtD(d).slice(5)}`,[["復原",async()=>{ await B.setManualDone(wo,""); B.audit({act:"取消完工回報",wo}); invalidate(); render(); }],["改日期",()=>manualDoneDlg(wo)]]); }
+document.body.addEventListener("click",async e=>{
+  const q=e.target.closest("[data-qdone]"); if(q){ e.preventDefault(); e.stopPropagation(); if(canWrite===false) return; quickDone(q.dataset.qdone); return; }
+  const pk=e.target.closest("[data-pick]"); if(pk){ e.preventDefault(); e.stopPropagation(); if(canWrite===false) return; const wo=pk.dataset.pick; const w=derive().all.find(x=>x.wo===wo); if(!w) return;
+    datePop(pk,{title:`${w.tail} ${cardOf(w)||"WO "+wo}`,cur:w.sched||(w.auto?w.projD:""),min:w.start||"",limit:w.hardD||w.effDue||"",type:w.type,clear:w.sched?(w.auto||w.short?"改回自動預排":"取消排定"):"",
+      pick:async d=>{ const was=w.sched||""; await saveSched(wo,{d}); priWarnToast(wo,d); toast(d?`${w.tail} ${cardOf(w)||wo} 排定 ${fmtD(d).slice(5)}`:"已取消排定",[["復原",()=>saveSched(wo,{d:was})]]); }}); return; }
+  const sp=e.target.closest("[data-spick]"); if(sp){ e.preventDefault(); e.stopPropagation(); if(canWrite===false) return; const [tail,key]=sp.dataset.spick.split("|"); const sd=M.short[safeKey(tail)]; if(!sd) return; const it=sd.items[key];
+    const r=derive().shortRows.find(x=>x.tail===tail&&x.key===key); const last=r&&r.last||"";
+    datePop(sp,{title:`${tail} ${it.task}（無 WO）`,cur:r&&r.planFl||"",min:last?addDays(last,1):"",limit:r&&r.hard||"",type:typeOf(tail),clear:it.planD?"改回自動預排":"",
+      pick:async d=>{ if(d&&last&&d<=last){ toast("預排日要在上次執行之後"); return; } const was=it.planD||""; await B.patchShort(tail,key,{planD:d}); B.audit({act:"短天期預排(無WO)",wo:it.task,tail,from:was,to:d||"自動"}); invalidate(); render();
+        toast(d?(r&&r.hard&&d>r.hard?`⚠ 預排 ${fmtD(d).slice(5)} 已超過 DUE ${fmtD(r.hard).slice(5)}`:`${tail} ${it.task} 預排 ${fmtD(d).slice(5)}`):"已改回自動預排",[["復原",async()=>{ await B.patchShort(tail,key,{planD:was}); invalidate(); render(); }]]); }}); return; }
+  const mo=e.target.closest("[data-more]"); if(mo){ e.preventDefault(); e.stopPropagation(); const wo=mo.dataset.more; const w=derive().all.find(x=>x.wo===wo); if(!w) return;
+    const p=openPop(mo,`<div class="pop-t">${esc(w.tail)} ${esc(cardOf(w)||"WO "+wo)}</div><div class="pop-menu">
+      <button data-mdone="${esc(wo)}">完工（選日期）</button>${w.sched?`<button data-ret="${esc(wo)}">退工</button>`:""}<button data-mat="${esc(wo)}">${w.wm?"料已到":"待料"}</button><button data-pz="${esc(wo)}">${w.holdR&&w.holdR.wt?"解除暫緩":"暫緩"}</button>${!w.noWo&&w.st!=="queue"?`<button data-due="${esc(wo)}">改起始日／到期日</button>`:""}<button data-hist="${esc(wo)}">異動歷程</button><button class="del" data-del="${esc(wo)}">刪除工單…</button></div>`);
+    p.addEventListener("click",()=>setTimeout(closePop,0)); return; }
+  const rm=e.target.closest("[data-rmore]"); if(rm){ e.preventDefault(); e.stopPropagation(); const [tail,key]=rm.dataset.rmore.split("|"); const sd=M.short[safeKey(tail)]; if(!sd) return; const it=sd.items[key];
+    openPop(rm,`<div class="pop-t">${esc(tail)} ${esc(it.task)}</div><div class="pop-row" style="margin-top:0"><span style="font-size:13px">上次執行</span><input type="date" data-sl="${esc(tail)}|${esc(key)}" value="${esc(it.lastDone||"")}" max="${todayISO()}"></div><div class="pop-t" style="margin-top:6px">實際執行日不同時直接改，後續預排從這天重算</div>${it.planD?`<div class="pop-menu"><button data-spx="${esc(tail)}|${esc(key)}">改回自動預排</button></div>`:""}`); return; }
+});
+document.addEventListener("change",e=>{ if(POP&&e.target.closest(".pop")&&e.target.dataset.sl) setTimeout(closePop,0); });
 let pendingDay=false;
 function onDate(w,D,T){ if(w.st==="hmv") return false; if(w.st==="done"&&w.doneVia==="sup") return false; // closed together with a newer WO — that row shows it
   if(w.st==="done") return (w.doneDate||w.sched)===D; // a finished WO sits on the day it was actually done
@@ -4667,7 +4804,7 @@ document.body.addEventListener("click",async e=>{
   const t=e.target.closest("[data-st],[data-ck],[data-ty],[data-tail],[data-clr],[data-pg],[data-rm],th.sortable");
   if(!t) return;
   let jump=false;
-  if(t.dataset.st!=null){ui.status=ui.status===t.dataset.st?"":t.dataset.st; ui.check=""; jump=!!ui.status;}
+  if(t.dataset.st!=null&&ST[t.dataset.st]){ui.status=ui.status===t.dataset.st?"":t.dataset.st; ui.check=""; jump=!!ui.status;}
   else if(t.dataset.ck!=null){
     if(t.dataset.ck==="shortNeed"||t.dataset.ck==="shortMiss"){ ui.shortF=t.dataset.ck==="shortNeed"?"need":"miss"; setShortOpen(true); $("#secShort").scrollIntoView({behavior:"smooth"}); return; }
     if(t.hasAttribute("data-info")){ extrasDlg(); return; }
