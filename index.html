@@ -3518,7 +3518,7 @@ function renderGate(){
     $("#gSend").disabled=true; try{ await db.doc("join/"+me.id).set({name:n,at:new Date().toISOString()}); }catch(e){ $("#gSend").disabled=false; showMsg("送出失敗",`<p>${esc(e&&e.message||e)}</p>`); } };
   return true;
 }
-function renderNow(){
+function renderNow0(){
   if(renderGate()) return;
   if(!loaded.plans){ $("#tbody").innerHTML=`<tr><td colspan="10"><div class="empty">正在載入共用資料…</div></td></tr>`; return; }
   const {all}=derive(); syncLabel();
@@ -3566,16 +3566,27 @@ function renderNow(){
   const af=[]; if(ui.tail) af.push(["tail","機號 "+ui.tail]); if(ui.status) af.push(["status",ST[ui.status].t]); if(ui.check){const c=checksOf(all).find(c=>c.k===ui.check); if(c) af.push(["check",c.t]);}
   $("#activeF").innerHTML=af.map(([k,t])=>`<button class="tag" data-clr="${k}">${esc(t)}</button>`).join("");
   document.querySelectorAll("th.sortable").forEach(th=>{const base=th.textContent.replace(/ [▲▼]$/,""); th.textContent=base+(th.dataset.k===ui.sort?(ui.dir>0?" ▲":" ▼"):"");});
-  renderDay(); renderLoad(); renderStn(); renderDsp(); renderPri(); renderKpi();
   document.body.classList.toggle("v-day",ui.view==="day"); document.body.classList.toggle("v-load",ui.view==="load"); document.body.classList.toggle("v-month",ui.view==="month"); document.body.classList.toggle("v-stn",ui.view==="stn"); document.body.classList.toggle("v-dsp",ui.view==="dsp"); document.body.classList.toggle("v-pri",ui.view==="pri"); document.body.classList.toggle("v-kpi",ui.view==="kpi");
   document.querySelectorAll("#vtabs [data-view]").forEach(b=>{ b.classList.toggle("on",b.dataset.view===ui.view); if(b.dataset.view==="day"){ const n=all.filter(w=>w.st==="past"||(w.st==="over"&&!w.hold)||pzAlert(w)).length; b.querySelector(".ct").textContent=n||""; } });
+  safeRun("今日控管",renderDay); safeRun("月負荷",renderLoad); safeRun("駐站",renderStn); safeRun("派遣檢查",renderDsp); safeRun("優先排工",renderPri); safeRun("考核統計",renderKpi);
   if(ui.view!=="month") return;
-  renderTable(all);
-  renderShort();
-  renderStats();
-  renderLog();
+  safeRun("工單明細",()=>renderTable(all)); safeRun("短天期",renderShort); safeRun("統計",renderStats); safeRun("操作紀錄",renderLog);
   resolveNames();
 }
+
+/* ---------- 畫面某一區塊出錯時：其他區塊照常顯示、分頁照常切換，錯誤記到 errlog 供排查（11/3） ---------- */
+let errN=0;
+function logErr(e,where){ try{ console.error(where,e); if(errN++>30) return; const d=todayISO(), id=uid();
+    const rec={where:String(where||""),msg:String(e&&e.message||e).slice(0,300),stack:String(e&&e.stack||"").slice(0,1500),view:ui.view||"",day:ui.day||"",at:new Date().toISOString(),by:me&&me.id||"",ua:navigator.userAgent.slice(0,120)};
+    if(mode==="db"&&db) db.doc("errlog/"+d).update({day:d,e:{[id]:rec}}).catch(()=>db.doc("errlog/"+d).set({day:d,e:{[id]:rec}}).catch(()=>{}));
+    if(errN<=3) toast(`「${where}」顯示時發生錯誤，已自動記錄；其他功能可繼續使用`); }catch(x){} }
+function safeRun(where,f){ try{ f(); }catch(e){ logErr(e,where); } }
+function renderNow(){ try{ renderNow0(); }catch(e){ logErr(e,"畫面更新");
+    try{ ["day","load","month","stn","dsp","pri","kpi"].forEach(v=>document.body.classList.toggle("v-"+v,ui.view===v)); document.querySelectorAll("#vtabs [data-view]").forEach(b=>b.classList.toggle("on",b.dataset.view===ui.view)); }catch(x){}
+    safeRun("今日控管",renderDay); safeRun("月負荷",renderLoad); safeRun("駐站",renderStn); safeRun("派遣檢查",renderDsp); safeRun("優先排工",renderPri); safeRun("考核統計",renderKpi);
+    if(ui.view==="month"){ safeRun("工單明細",()=>renderTable(derive().all)); safeRun("短天期",renderShort); safeRun("統計",renderStats); } } }
+window.addEventListener("error",e=>logErr(e.error||e.message,"未預期錯誤"));
+window.addEventListener("unhandledrejection",e=>{ const r=e.reason; if(r&&(r.code==="cancelled"||r.name==="AbortError")) return; logErr(r,"未預期錯誤（非同步）"); });
 /* =====================================================================
    今日控管 — the daily view: what is scheduled on a day, what should have been done already, what needs a date now
    ===================================================================== */
