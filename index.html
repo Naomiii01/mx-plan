@@ -1423,8 +1423,12 @@ function derive(){
     for(const [wo,d] of Object.entries(doneMap)) if(!d.manual&&pdOf[wo+"|"+d.date]) doneMap[wo]={...d,date:pdOf[wo+"|"+d.date],signed:d.date}; }
   // work orders, one per WO; a WO in several months keeps the latest month
   const reg={}; const months={};
+  const cut=planCut(M.config.windowMonths), cutD=cut+"-01";
   for(const [pid,p] of Object.entries(M.plans)){
+    const old=(p.month||"")<cut;
     for(const [wo,w] of Object.entries(p.wos||{})){
+      /* 視窗外的舊月份：只留還沒完工的、或在視窗期間內完工的（例如 9 月的 AD 工單 11/2 才做） */
+      if(old){ if(w.removed) continue; const d=doneMap[wo]; if(d&&(d.date||"")<cutD) continue; }
       const prev=reg[wo];
       const rec={...w,wo,month:p.month,tail:p.tail,type:typeOf(p.tail,p.type),pid,file:w.file||p.file};
       if(prev){ rec.carry=true; if((prev.month||"")>(p.month||"")){ prev.carry=true; continue; } }
@@ -5317,10 +5321,12 @@ function maybeDemo(){ return; /* sample data removed: the page starts empty */ i
    BOOT
    ===================================================================== */
 let unsubPlans=null;
+function planCut(win){ return monthAdd(todayISO().slice(0,7),-(Math.max(2,win||6)-2)); }
+function planFloor(){ return String((M.config||{}).planFloor||"2026-09"); }
 function subscribePlans(win){
   if(unsubPlans) unsubPlans();
-  const cutoff=monthAdd(todayISO().slice(0,7),-(Math.max(2,win||6)-2));
-  unsubPlans=db.collection("plans").where("month",">=",cutoff).onSnapshot(snap=>{
+  const cutoff=planCut(win); const from=[cutoff,planFloor()].sort()[0];  /* 舊月份的計畫也要載入：未完工、或延到這期間才排／才做的工單要繼續顯示（11/3） */
+  unsubPlans=db.collection("plans").where("month",">=",from).onSnapshot(snap=>{
     if(demo&&snap.size){ demo=false; M.adhoc={};M.sched={};M.done={};M.logs={}; }
     if(!demo){ const p={}; snap.docs.forEach(d=>{p[d.id]=d.data();}); M.plans=p; }
     loaded.plans=true; if(!snap.metadata.fromCache&&!snap.size&&!demo) maybeDemo();
