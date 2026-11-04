@@ -952,7 +952,9 @@ body:not(.v-dsp) #secDsp{display:none}
         cb({size:L.length,docs:L.map(([id,d])=>({id,exists:true,data:()=>clone(d)})),metadata:{fromCache:false}}); },30); };
       const un=onColl(coll,(row,delPath)=>{ if(delPath){ map.delete(split(delPath)[1]); emit(); return; } if(!row) return;
         if(pass(row.data)) map.set(row.id,row.data); else map.delete(row.id); emit(); });
-      const self=this; const full=()=>self._fetch().then(d=>{ map.clear(); d.forEach(x=>map.set(x.id,x.data)); lastSync=Date.now(); emit(); });
+      const sig=()=>{ try{ return JSON.stringify([...map.entries()].sort((a,b)=>a[0]<b[0]?-1:1)); }catch(e){ return Math.random()+""; } };
+      /* 每分鐘的定時同步：資料沒變就不重畫（重畫會把畫面上打開的東西收回去） */
+      const self=this; const full=()=>self._fetch().then(d=>{ const was=sig(); map.clear(); d.forEach(x=>map.set(x.id,x.data)); lastSync=Date.now(); if(sig()!==was) emit(); });
       this._fetch().then(d=>{ d.forEach(x=>map.set(x.id,x.data)); lastSync=Date.now(); paintSt(); emit(); }).catch(e=>ecb&&ecb(e));
       syncers.add(full); return ()=>{ off=true; un(); syncers.delete(full); }; } }; }
   async function wr(q){ let r; try{ r=await q; }catch(e){ r={error:e}; }
@@ -966,9 +968,9 @@ body:not(.v-dsp) #secDsp{display:none}
       async set(obj){ return wr(sb.from("docs").upsert({path,coll,id,data:clone(obj),updated_at:new Date().toISOString(),updated_by:user&&user.id})); },
       async update(patch){ return wr(sb.rpc("doc_update",{p_path:path,p_patch:clone(patch)})); },
       async delete(){ return wr(sb.from("docs").delete().eq("path",path)); },
-      onSnapshot(cb,ecb){ let off=false; const un=onColl(coll,(row,delPath)=>{ if(off) return; if(delPath===path) cb(docSnap(path,null)); else if(row&&row.path===path) cb(docSnap(path,row)); });
-        const self=this; const full=()=>self.get().then(s=>{ if(!off) cb(s); });
-        this.get().then(s=>{ if(!off) cb(s); }).catch(e=>ecb&&ecb(e)); syncers.add(full); return ()=>{ off=true; un(); syncers.delete(full); }; } }; }
+      onSnapshot(cb,ecb){ let off=false, lastJ=null; const un=onColl(coll,(row,delPath)=>{ if(off) return; if(delPath===path){ lastJ='null'; cb(docSnap(path,null)); } else if(row&&row.path===path){ lastJ=JSON.stringify(row.data); cb(docSnap(path,row)); } });
+        const self=this; const full=()=>self.get().then(s=>{ if(off) return; const j=JSON.stringify(s.data()===undefined?null:s.data()); if(j===lastJ) return; lastJ=j; cb(s); });
+        this.get().then(s=>{ if(!off){ lastJ=JSON.stringify(s.data()===undefined?null:s.data()); cb(s); } }).catch(e=>ecb&&ecb(e)); syncers.add(full); return ()=>{ off=true; un(); syncers.delete(full); }; } }; }
   };
   const userApi={
     async me(){ return {id:user.id,name:(user.email||"").split("@")[0]}; },
