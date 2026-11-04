@@ -1558,7 +1558,7 @@ function derive(){
       const left=planFl?daysBetween(today,planFl):nextPlan?daysBetween(today,nextPlan):hard?daysBetween(today,hard):null, hardLeft=hard?daysBetween(today,hard):null;
       shortRows.push({tail,type,key,it,last,lastVia,cancelled:cancelled&&!planFl?cancelled:null,hmv:hmvOn[tail]||planHmv||null,nextPlan,planFl,planWas,planNo,planBy,planSame,planMx,hard,byInt,warn,left,hardLeft,cur:cur?cur.wo:"",curSched:cs.d||"",open:open.length,matched:matched.length,
         need:!!(!it.routine&&cur&&!cs.d&&(nextPlan?left<=2:hard?hardLeft<=warn:false)),
-        miss:[!last&&!(planBy==="first")?"缺上次完工日":"",!it.cycle&&!byInt?"缺週期":"",!cur&&!it.routine?"月計畫中沒有可排的 WO":""].filter(Boolean)});
+        miss:[!last&&!(planBy==="first")?"缺上次完工日":"",!it.cycle&&!byInt?"缺週期":"",!cur&&!it.routine&&!(cancelled&&!planFl)?"月計畫中沒有可排的 WO":""].filter(Boolean)});
     }
   }
   // non-short WOs are closed by their own WO number only (planner's rule, 10/13); the old card fallback stays behind a config switch, off by default
@@ -4373,7 +4373,7 @@ function shortFiltered(f){
   const R=derive().shortRows.filter(r=>(!ui.type||r.type===ui.type)&&(!ui.tail||r.tail===ui.tail));
   if(f==="need") return R.filter(r=>r.need);
   if(f==="miss") return R.filter(r=>r.miss.length);
-  if(f==="week") return R.filter(r=>r.left!=null&&r.left<=7);
+  if(f==="week") return R.filter(r=>!r.cancelled&&r.left!=null&&r.left<=7);
   return R;
 }
 function renderShort(){
@@ -4397,10 +4397,10 @@ function renderShort(){
       <td class="s-int" data-l="間隔" style="font-size:12px;min-width:110px">${esc(r.it.dueText||"")}</td>
       <td class="mono s-cyc" data-l="週期" style="white-space:nowrap">${r.it.cycle?r.it.cycle+" 天":"—"}</td>
       <td class="s-last" data-l="上次完工"><input type="date" data-sl="${esc(r.tail)}|${esc(r.key)}" value="${esc(r.last)}" max="${todayISO()}" title="只填已確認執行的日期；預排請排在當期 WO 的排定日期" ${ro} aria-label="上次完工 ${esc(r.it.task)}">${r.last&&r.last!==r.it.lastDone?`<span class="days">由完工檔更新</span>`:""}</td>
-      <td class="mono s-next" data-l="預排日" style="white-space:nowrap">${!r.last&&r.planBy==="first"?`${fmtD(r.planFl)}<span class="days">首次執行</span>`:`${fmtD(r.nextPlan)||"—"}<span class="days ${lc}">${lt}</span>`}</td>
+      <td class="mono s-next" data-l="預排日" style="white-space:nowrap">${r.cancelled?`—<span class="days">暫停（WO 已取消）</span>`:!r.last&&r.planBy==="first"?`${fmtD(r.planFl)}<span class="days">首次執行</span>`:`${fmtD(r.nextPlan)||"—"}<span class="days ${lc}">${lt}</span>`}</td>
       <td class="mono s-hard" data-l="DUE" style="white-space:nowrap">${fmtD(r.hard)||(r.it.fhfc?`<span style="font-size:11.5px">依 FH/FC</span>`:"—")}${ht?`<span class="days ${hc}">${ht}</span>`:""}</td>
       <td class="nw s-cur" data-l="當期 WO">${r.cur?`<button class="wo-link mono" data-hist="${esc(r.cur)}">${esc(r.cur)}</button><span class="days">${r.curSched?"排定 "+esc(fmtD(r.curSched).slice(5)):"未排定"}${r.open>1?` · 後續 ${r.open-1} 張`:""}</span>`:"—"}</td>
-      <td class="s-rem" style="min-width:120px">${r.hmv?`<span class="mini hmvt">HMV 中，暫停計算（預計 RELEASE ${esc(fmtD(r.hmv.end||"").slice(5)||"未定")}）</span>`:""}${r.miss.map(m=>`<span class="mini warn">${esc(m)}</span>`).join("")}${euro}</td></tr>`;}).join("");
+      <td class="s-rem" style="min-width:120px">${r.hmv?`<span class="mini hmvt">HMV 中，暫停計算（預計 RELEASE ${esc(fmtD(r.hmv.end||"").slice(5)||"未定")}）</span>`:""}${r.cancelled?`<span class="mini" title="${esc(r.cancelled.reason)}">WO ${esc(r.cancelled.wo)} 已取消${r.cancelled.at?"（"+esc(fmtD(r.cancelled.at.slice(0,10)).slice(5))+"）":""}，暫停自動預排；有新 WO、新完工或手動排預排日才恢復</span>`:""}${r.miss.map(m=>`<span class="mini warn">${esc(m)}</span>`).join("")}${euro}</td></tr>`;}).join("");
   el.innerHTML=`<div class="fleet-tabs">${tabs}${canWrite!==false?`<button class="btn sm" data-firstplan style="margin-left:auto" title="新交機、還沒有任何上次完工的飛機：排定各短天期第一次執行日">新機首次排定</button>`:""}</div><div class="tbl-wrap"><table class="short-t"><thead><tr><th>機號</th><th>工項</th><th>間隔</th><th>週期</th><th>上次完工</th><th>預排日（週期）</th><th>DUE（間隔）</th><th>當期 WO</th><th>提醒</th></tr></thead><tbody>${rows||`<tr><td colspan="9"><div class="empty">沒有符合的工項</div></td></tr>`}</tbody></table>${L.length>300?`<div class="pager">只顯示前 300 項，請選擇機型或機號縮小範圍。</div>`:""}</div>`;
 }
 /* =====================================================================
