@@ -1500,7 +1500,7 @@ function derive(){
   const hmvWo={}, hmvOn={}; for(const h of Object.values(M.hmv||{})) for(const ev of (h.events||[])){ (ev.wos||[]).forEach(wo=>{ hmvWo[wo]={tail:h.tail,ev}; }); if(!ev.released&&ev.start&&ev.start<=today) hmvOn[h.tail]=ev; }
   // an HMV that has not started yet: short items whose next cycle falls inside it are paused with it (recalculated from RELEASED)
   const hmvUp={}; for(const h of Object.values(M.hmv||{})) for(const ev of (h.events||[])) if(!ev.released&&ev.start&&ev.start>today&&(!hmvUp[h.tail]||ev.start<hmvUp[h.tail].start)) hmvUp[h.tail]=ev;
-  const liveByTail={}, rmByTail={}; for(const w of Object.values(reg)){ if(!w.noWo&&!w.removed&&!resolved[w.wo]) (liveByTail[w.tail]=liveByTail[w.tail]||[]).push(w); if(w.removed&&/工程／修管取消|改到其他月份/.test(w.rmReason||"")) (rmByTail[w.tail]=rmByTail[w.tail]||[]).push(w); }
+  const liveByTail={}, rmByTail={}; for(const w of Object.values(reg)){ if(!w.noWo&&!w.removed&&!resolved[w.wo]) (liveByTail[w.tail]=liveByTail[w.tail]||[]).push(w); if(w.removed&&/工程／修管取消|改到其他月份|信件通知取消|CX|取消/i.test(w.rmReason||"")) (rmByTail[w.tail]=rmByTail[w.tail]||[]).push(w); }
   for(const sd of Object.values(M.short||{})){
     const tail=sd.tail; const cands=liveByTail[tail]||[];
     for(const [key,it] of Object.entries(sd.items||{})){
@@ -1526,7 +1526,9 @@ function derive(){
       if(cur){ cur.short={key,nextPlan,hard,it,last,warn,byInt}; }
       // 這期的 WO 被刪除（工程／修管取消、改到其他月份）：不再自動預排，直到有新的 WO、新的完工，或計畫員手動填預排日
       let cancelled=null; if(!cur&&!it.routine){ const rw=(rmByTail[tail]||[]).filter(w=>taskKeys(w).includes(T)&&(!sn||String((w.serial||"")+" "+(w.config||"")+" "+(w.title||"")).toUpperCase().includes(sn))&&(!pos||enginePos(w)==null||enginePos(w)===pos)).sort((a,b)=>String(b.rmAt||"").localeCompare(String(a.rmAt||"")));
-        const r0=rw[0]; if(r0&&(!last||String(r0.rmAt||"").slice(0,10)>=last)) cancelled={wo:r0.wo,reason:r0.rmReason||"",at:r0.rmAt||""}; }
+        const r0=rw[0]; if(r0&&(!last||String(r0.rmAt||"").slice(0,10)>=last)) cancelled={wo:r0.wo,reason:r0.rmReason||"",at:r0.rmAt||""};
+        /* 信件 CX 但月計畫沒有這期 WO：直接記在短天期項目上 */
+        if(!cancelled&&it.cx&&it.cx.at&&(!last||String(it.cx.at).slice(0,10)>=last)) cancelled={wo:"",reason:it.cx.reason||"",at:it.cx.at}; }
       open.slice(1).forEach((w,i)=>{ w.shortQueue={n:i+2,of:open.length,task:it.task}; });
       // 自動預排: every open WO of the chain gets its own planned day, counted from the last execution — the 1st at +1 step, the 2nd at +2 steps…
       // (step = 週期; A350/A351 planned on the INTERVAL). Re-computed whenever a completion moves "last", so the whole chain follows
@@ -4370,7 +4372,7 @@ function rowHTML(w){
 }
 function shortNeed(){ return derive().shortRows.filter(r=>!r.hmv&&r.need&&(!ui.type||r.type===ui.type)&&(!ui.tail||r.tail===ui.tail)); }
 function shortFiltered(f){
-  const R=derive().shortRows.filter(r=>(!ui.type||r.type===ui.type)&&(!ui.tail||r.tail===ui.tail));
+  const R=derive().shortRows.filter(r=>!r.cancelled&&(!ui.type||r.type===ui.type)&&(!ui.tail||r.tail===ui.tail));  /* 通知 CX 取消的不用再安排：不列出 */
   if(f==="need") return R.filter(r=>r.need);
   if(f==="miss") return R.filter(r=>r.miss.length);
   if(f==="week") return R.filter(r=>!r.cancelled&&r.left!=null&&r.left<=7);
@@ -5411,7 +5413,11 @@ async function saveAdhoc(){
       if(w.adhoc) await B.patchAdhoc(w.aMonth,k,patch); else await B.patchPlanWo(w.pid,k,patch);
       B.audit({act:"信件取消工單",wo:k,tail:w.tail,to:reason,file:src}); return true; };
     AH.cancelled=[]; AH.replaced=[]; AH.serialed=[]; AH.noHit=[];
-    for(const r of cancels){ const L=r.wo?[r.wo]:ahCardHits(r).map(w=>w.wo); if(!L.length) AH.noHit.push(`${r.tail} ${r.mr}`);
+    for(const r of cancels){ const L=r.wo?[r.wo]:ahCardHits(r).map(w=>w.wo);
+      { const T=String(r.mr||(r.wo&&derive().reg[r.wo]&&cardOf(derive().reg[r.wo]))||"").trim().toUpperCase(), tl=String(r.tail||(r.wo&&derive().reg[r.wo]&&derive().reg[r.wo].tail)||"").toUpperCase(), sd=M.short[safeKey(tl)], pos=enginePos({config:r.config||""}); let hit=0;
+        if(sd&&T) for(const [key,it] of Object.entries(sd.items||{})){ if(String(it.task||"").trim().toUpperCase()!==T||it.routine) continue; const p0=(String(it.serial||"").split("#")[1]||"").trim(); if(pos&&p0&&p0!==pos) continue;
+          await B.patchShort(tl,key,{cx:{at:now,reason:`信件通知取消（${who_}）${r.remark?"："+r.remark:""}`}}); hit++; }
+        if(!L.length&&!hit) AH.noHit.push(`${r.tail} ${r.mr}`); }
       for(const wo of L) if(await removeWo(wo,`信件通知取消（${who_}）${r.remark?"："+r.remark:""}`)) AH.cancelled.push(wo); }
     // 改序號：WO 的 S/N 換成新序號（照原定時間發工），同機同卡號、原序號的短天期一起改
     for(const r of serials){ const k=canonHit(r.wo), w=derive().reg[k]; if(!w) continue; const old=String(r.serialOld||w.serial||"").toUpperCase(), nu=String(r.serial).trim().toUpperCase();
