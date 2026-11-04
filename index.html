@@ -1115,7 +1115,7 @@ let demo=false, loaded={plans:false,done:false,sched:false};
 let db=null, U=null, me=null, canWrite=true;
 let storageOK=true;
 const names={}; const asked=new Set();
-const ui={loadRt:(()=>{ try{ return localStorage.getItem("mxplan.loadRt")!=="0"; }catch(e){ return true; } })(),stnMode:(()=>{ try{ return localStorage.getItem("mxplan.stnMode")||"month"; }catch(e){ return "month"; } })(),shortOpen:(()=>{ try{ return localStorage.getItem("mxplan.short")==="1"; }catch(e){ return false; } })(),view:(()=>{ try{ return localStorage.getItem("mxplan.view")||"day"; }catch(e){ return "day"; } })(),day:"",dayType:"",dayTail:"",openSec:{},loadM:"",loadType:"",loadSty:(()=>{ try{ return localStorage.getItem("mxplan.loadSty")==="1"; }catch(e){ return false; } })(),loadSel:"",type:"",tail:"",status:"",check:"",q:"",month:"",pkg:"",src:"",hideDone:false,fleetOpen:"",sort:"due",dir:1,page:0,who:"",act:"",shortF:"need"};
+const ui={loadRt:(()=>{ try{ return localStorage.getItem("mxplan.loadRt")!=="0"; }catch(e){ return true; } })(),stnMode:(()=>{ try{ return localStorage.getItem("mxplan.stnMode")||"month"; }catch(e){ return "month"; } })(),shortOpen:(()=>{ try{ return localStorage.getItem("mxplan.short")==="1"; }catch(e){ return false; } })(),view:(()=>{ try{ return localStorage.getItem("mxplan.view")||"day"; }catch(e){ return "day"; } })(),dgOpen:new Set(),day:"",dayType:"",dayTail:"",openSec:{},loadM:"",loadType:"",loadSty:(()=>{ try{ return localStorage.getItem("mxplan.loadSty")==="1"; }catch(e){ return false; } })(),loadSel:"",type:"",tail:"",status:"",check:"",q:"",month:"",pkg:"",src:"",hideDone:false,fleetOpen:"",sort:"due",dir:1,page:0,who:"",act:"",shortF:"need"};
 const PAGE=200;
 let cache=null;           // derived data, rebuilt when M changes
 
@@ -3768,17 +3768,18 @@ function dayGroups(L,opt){ // grouped by aircraft
     return `<div class="dg"><div class="dg-h"><span class="tail-reg">${esc(t)}</span><span class="tail-type">${esc(typeOf(t))}</span>${x?`<span class="mini">${esc(x.station)} ${esc(fmtD(x.start).slice(5))}–${esc(fmtD(x.end).slice(5)||"?")}</span>`:""}${h?`<span class="mini hmvt">HMV</span>`:""}${flHead(t,D)}<span class="dg-n">${opt&&opt.progress?`完成 <b>${dn}</b> / ${ws.length}`:`<b>${ws.length}</b> 張`}</span></div>${nts.map(n=>`<div class="dg-note">📌 ${n.time?`<b class="mono">${esc(n.time)}</b> `:""}${esc(n.text)}</div>`).join("")}${(()=>{ const one=w=>w.sty?styItem(w):w.rt?routineItem(w):w.ev?evItem(w):dayItem(w,opt);
       if(!(opt&&opt.progress)||!dn) return ws.map(one).join("");
       /* 已完工先收合（點開或搜尋時才畫出來），畫面短、也比較快 */
-      const k="g"+(++DGN); DGDONE[k]=()=>ws.filter(w=>w.st==="done").map(one).join("");
-      return ws.filter(w=>w.st!=="done").map(one).join("")+`<button class="dg-done" data-dgdone="${k}">✓ 已完工 ${dn} 項 ▸</button><div class="dg-donebox" data-dgbox="${k}" hidden></div>`; })()}</div>`; }).join("");
+      /* 開／關記在 ui.dgOpen（日期＋機號），畫面因同步資料重畫時維持原狀，不會自己又收起來 */
+      const k=D+"|"+t, isO=ui.dgOpen.has(k); DGDONE[k]=()=>ws.filter(w=>w.st==="done").map(one).join("");
+      return ws.filter(w=>w.st!=="done").map(one).join("")+`<button class="dg-done" data-dgdone="${esc(k)}">✓ 已完工 ${dn} 項 ${isO?"▾":"▸"}</button><div class="dg-donebox" data-dgbox="${esc(k)}" ${isO?`data-f="1"`:"hidden"}>${isO?DGDONE[k]():""}</div>`; })()}</div>`; }).join("");
 }
-let DGDONE={}, DGN=0;
-function openDgDone(k,force){ const box=document.querySelector(`[data-dgbox="${k}"]`), b=document.querySelector(`[data-dgdone="${k}"]`); if(!box||!b) return;
+let DGDONE={};
+function openDgDone(k,force,keep){ const sel=x=>document.querySelector(`[${x}="${CSS.escape(k)}"]`); const box=sel("data-dgbox"), b=sel("data-dgdone"); if(!box||!b) return;
   const show=force!=null?force:box.hidden; if(show&&!box.dataset.f&&DGDONE[k]){ box.innerHTML=DGDONE[k](); box.dataset.f="1"; }
-  box.hidden=!show; b.textContent=b.textContent.replace(/[▸▾]$/,show?"▾":"▸"); }
-document.addEventListener("click",e=>{ const b=e.target.closest("[data-dgdone]"); if(b){ e.preventDefault(); openDgDone(b.dataset.dgdone); } });
+  box.hidden=!show; b.textContent=b.textContent.replace(/[▸▾]$/,show?"▾":"▸"); if(!keep){ if(show) ui.dgOpen.add(k); else ui.dgOpen.delete(k); } }
+document.addEventListener("click",e=>{ const b=e.target.closest("[data-dgdone]"); if(b){ e.preventDefault(); e.stopPropagation(); openDgDone(b.dataset.dgdone); } },true);
 /* 今日排定內搜尋：打機號、卡號、WO 或工作名稱，只留符合的；已完工也會一起找出來 */
 function applyDayFind(){ const q=String(ui.dayFind||"").trim().toUpperCase(); const sec=document.getElementById("kDay"); if(!sec) return;
-  if(q) sec.querySelectorAll("[data-dgdone]").forEach(b=>openDgDone(b.dataset.dgdone,true));
+  if(q) sec.querySelectorAll("[data-dgdone]").forEach(b=>openDgDone(b.dataset.dgdone,true,true));
   let n=0; sec.querySelectorAll(".dg").forEach(g=>{ const tail=(g.querySelector(".tail-reg")||{}).textContent||""; let any=false;
     g.querySelectorAll(".dw").forEach(r=>{ const ok=!q||(tail+" "+r.textContent).toUpperCase().includes(q); r.hidden=!ok; if(ok){ any=true; n++; } });
     g.hidden=!!q&&!any; });
