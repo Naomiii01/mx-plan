@@ -1767,15 +1767,15 @@ async function importPlan(wb,fileName){
     if(!G&&!fullPlan) continue;
     if(!G){ // aircraft entirely missing from the new file
       const patch={...p,wos:{...p.wos}}; let n=0;
-      for(const [wo,w] of Object.entries(p.wos||{})){ if(w.removed||doneMap[wo]||w.missing||isShortWo(p.tail,w)) continue; patch.wos[wo]={...w,missing:true,missingAt:now,missingFile:fileName}; newlyMissing.push(wo); n++; }
+      for(const [wo,w] of Object.entries(p.wos||{})){ if(w.removed||doneMap[wo]||w.missing||w.fromWo||isShortWo(p.tail,w)) continue; patch.wos[wo]={...w,missing:true,missingAt:now,missingFile:fileName}; newlyMissing.push(wo); n++; }
       if(n){ tailsGone.push(p.tail); await B.setPlan(pid,patch); }
       continue;
     }
     for(const [wo,w] of Object.entries(p.wos||{})){
-      if(G.wos[wo]){ if(w.removed) G.wos[wo].removed=false; continue; }
+      if(G.wos[wo]){ if(w.removed&&w.replacedBy) G.wos[wo]={...G.wos[wo],removed:true,rmBy:w.rmBy,rmAt:w.rmAt,rmReason:w.rmReason,replacedBy:w.replacedBy}; else if(w.removed) G.wos[wo].removed=false; continue; }  /* 已變更 WO 的舊單：重新匯入也維持移除 */
       if(w.noWo&&Object.entries(G.wos).some(([k,x])=>!x.noWo&&sameTask(w,x))){ G.wos[wo]={...w,missing:false}; continue; } // WO now issued: keep the placeholder so its notes carry over
       if(w.removed){ G.wos[wo]=w; continue; }
-      if(doneMap[wo]||isShortWo(p.tail,w)){ G.wos[wo]={...w,missing:false}; continue; }
+      if(doneMap[wo]||isShortWo(p.tail,w)||w.fromWo){ G.wos[wo]={...w,missing:false}; continue; }
       G.wos[wo]={...w,missing:true,missingAt:w.missingAt||now,missingFile:w.missingFile||fileName};
       if(!w.missing) newlyMissing.push(wo);
     }
@@ -4287,6 +4287,39 @@ document.addEventListener("click",e=>{
   const s=e.target.closest("[data-rcshow]"); if(s){ ui.retShow=ui.retShow===s.dataset.rcshow?"":s.dataset.rcshow; renderRet(); return; }
   const i=e.target.closest("[data-retimp]"); if(i){ openRetImport(); return; }
 });
+
+/* ---------- 變更 WO 號碼（修管重發工單、或無 WO 項目取得 WO）：新 WO 接手排定日、備註、待料等，舊 WO 標「由新 WO 取代」 ---------- */
+function woChangeDlg(wo){
+  if(canWrite===false){ showMsg("沒有編輯權限","<p>你目前只能檢視。</p>"); return; }
+  const w=derive().reg[wo], v=derive().all.find(x=>x.wo===wo); if(!w){ toast("找不到這張工單"); return; }
+  const inp='style="flex:1;min-width:0;border:1px solid var(--line);background:var(--panel-2);border-radius:6px;padding:6px 10px"';
+  const d=openDlg(`<h3>${w.noWo?"填入 WO 號碼":"變更 WO 號碼"}</h3><p><b class="mono">${w.noWo?"無 WO":"WO "+esc(wo)}</b>　${esc(w.tail)}　<b class="mono">${esc(cardOf(w))}</b><br>${esc((w.title||"").slice(0,80))}${v&&v.sched?`<br>排定 <b class="mono">${esc(fmtD(v.sched))}</b>`:""}</p>
+    <div class="row"><label for="wcNew">新 WO</label><input id="wcNew" ${inp} inputmode="numeric" placeholder="例：1234567" autocomplete="off"></div>
+    <div class="row"><label for="wcNote">說明</label><input id="wcNote" ${inp} placeholder="例：修管重發工單（11/5 MAIL）"></div>
+    <p class="muted" style="font-size:12.5px;margin:0">新 WO 會接手原本的排定日、計畫備註、待料／暫緩等設定；${w.noWo?"這筆無 WO 項目":"舊 WO"}從清單移除，異動歷程記錄「由新 WO 取代」。之後完工檔用新 WO 就會自動完工。</p>
+    <div id="wcW"></div><div class="foot"><button class="btn" data-n>取消</button><button class="btn primary" data-y>確定變更</button></div>`);
+  const ni=d.querySelector("#wcNew"); setTimeout(()=>ni.focus(),50);
+  d.querySelector("[data-n]").onclick=closeDlg;
+  d.querySelector("[data-y]").onclick=async()=>{
+    const nw=normWO(ni.value), note=d.querySelector("#wcNote").value.trim(), W=t=>{ d.querySelector("#wcW").innerHTML=`<p style="color:var(--red);font-size:13px">${t}</p>`; };
+    if(!nw) return W("請輸入新 WO 號碼。"); if(nw===wo) return W("新 WO 和原本相同。");
+    const R=derive().reg, ex=R[nw];
+    if(ex&&!ex.removed&&ex.tail!==w.tail) return W(`WO ${esc(nw)} 已存在，但是 ${esc(ex.tail)} 的工單，請確認號碼。`);
+    closeDlg();
+    const now=new Date().toISOString(), by=me&&me.id||"";
+    if(!ex||ex.removed){ const raw=w.adhoc?((M.adhoc[safeKey(w.aMonth)]||{}).items||{})[wo]:((M.plans[w.pid]||{}).wos||{})[wo];
+      const rec={...(raw||{})}; ["removed","rmBy","rmAt","rmReason","missing","replacedBy","noWo","mxDate"].forEach(k=>delete rec[k]);
+      Object.assign(rec,{fromWo:wo,woChgAt:now,woChgBy:by,woChgNote:note}); if(w.noWo){ rec.fromNoWo=wo; if(w.mxDate) rec.mxFrom=w.mxDate; }
+      if(w.adhoc) await B.patchAdhoc(w.aMonth,nw,rec); else await B.patchPlanWo(w.pid,nw,rec); }
+    const sc=((M.sched[shardOf(wo)]||{}).e||{})[wo], scN=((M.sched[shardOf(nw)]||{}).e||{})[nw];
+    if(sc&&!(scN&&scN.d)) await B.setSched(nw,{...sc,n:[sc.n,`原 WO ${w.noWo?"（無 WO）":wo}`].filter(Boolean).join(" / "),by,at:now});
+    const patch={removed:true,missing:false,rmBy:by,rmAt:now,rmReason:`WO 變更為 ${nw}${note?"："+note:""}`,replacedBy:nw};
+    if(w.adhoc) await B.patchAdhoc(w.aMonth,wo,patch); else await B.patchPlanWo(w.pid,wo,patch);
+    B.audit({act:"變更 WO",wo:nw,tail:w.tail,from:w.noWo?"無 WO":wo,to:nw+(note?"："+note:"")}); B.audit({act:"變更 WO",wo,tail:w.tail,from:wo,to:`由 ${nw} 取代`});
+    invalidate(); render(); toast(`${w.tail} ${cardOf(w)}：WO ${w.noWo?"（無）":wo} → ${nw}`);
+  };
+}
+document.body.addEventListener("click",e=>{ const b=e.target.closest("[data-wochg]"); if(b){ e.preventDefault(); e.stopPropagation(); closePop(); woChangeDlg(b.dataset.wochg); } });
 /* ---------- 11/3 精簡操作：一鍵完工、點日期改期、⋯ 更多選單 ---------- */
 function qDoneDate(w){ const T=todayISO(), D=ui.view==="day"&&ui.day&&ui.day<T?ui.day:T; return w.sched&&w.sched<D?w.sched:D; }
 let POP=null;
@@ -4320,7 +4353,7 @@ document.body.addEventListener("click",async e=>{
         toast(d?(r&&r.hard&&d>r.hard?`⚠ 預排 ${fmtD(d).slice(5)} 已超過 DUE ${fmtD(r.hard).slice(5)}`:`${tail} ${it.task} 預排 ${fmtD(d).slice(5)}`):"已改回自動預排",[["復原",async()=>{ await B.patchShort(tail,key,{planD:was}); invalidate(); render(); }]]); }}); return; }
   const mo=e.target.closest("[data-more]"); if(mo){ e.preventDefault(); e.stopPropagation(); const wo=mo.dataset.more; const w=derive().all.find(x=>x.wo===wo); if(!w) return;
     const p=openPop(mo,`<div class="pop-t">${esc(w.tail)} ${esc(cardOf(w)||"WO "+wo)}</div><div class="pop-menu">
-      <button data-mdone="${esc(wo)}">完工（選日期）</button>${w.sched?`<button data-ret="${esc(wo)}">退工</button>`:""}<button data-mat="${esc(wo)}">${w.wm?"料已到":"待料"}</button><button data-pz="${esc(wo)}">${w.holdR&&w.holdR.wt?"解除暫緩":"暫緩"}</button>${!w.noWo&&w.st!=="queue"?`<button data-due="${esc(wo)}">改起始日／到期日</button>`:""}<button data-hist="${esc(wo)}">異動歷程</button><button class="del" data-del="${esc(wo)}">刪除工單…</button></div>`);
+      <button data-mdone="${esc(wo)}">完工（選日期）</button>${w.sched?`<button data-ret="${esc(wo)}">退工</button>`:""}<button data-mat="${esc(wo)}">${w.wm?"料已到":"待料"}</button><button data-pz="${esc(wo)}">${w.holdR&&w.holdR.wt?"解除暫緩":"暫緩"}</button><button data-wochg="${esc(wo)}">${w.noWo?"填入 WO 號碼":"變更 WO 號碼"}</button>${!w.noWo&&w.st!=="queue"?`<button data-due="${esc(wo)}">改起始日／到期日</button>`:""}<button data-hist="${esc(wo)}">異動歷程</button><button class="del" data-del="${esc(wo)}">刪除工單…</button></div>`);
     p.addEventListener("click",()=>setTimeout(closePop,0)); return; }
   const rm=e.target.closest("[data-rmore]"); if(rm){ e.preventDefault(); e.stopPropagation(); const [tail,key]=rm.dataset.rmore.split("|"); const sd=M.short[safeKey(tail)]; if(!sd) return; const it=sd.items[key];
     openPop(rm,`<div class="pop-t">${esc(tail)} ${esc(it.task)}</div><div class="pop-row" style="margin-top:0"><span style="font-size:13px">上次執行</span><input type="date" data-sl="${esc(tail)}|${esc(key)}" value="${esc(it.lastDone||"")}" max="${todayISO()}"></div><div class="pop-t" style="margin-top:6px">實際執行日不同時直接改，後續預排從這天重算</div>${it.planD?`<div class="pop-menu"><button data-spx="${esc(tail)}|${esc(key)}">改回自動預排</button></div>`:""}`); return; }
@@ -4359,7 +4392,7 @@ function rowHTML(w){
   const miss="";
   const by=w.schedBy&&(w.sched||w.note)?`<button class="by wo-link" data-hist="${esc(w.wo)}">${esc(who(w.schedBy))} ${esc(fmtT(w.schedAt).slice(5))}</button>`:"";
   return `<tr class="st-${w.st}">
-    <td class="cl-st"><span class="pill ${s.c}">${s.t}</span>${miss}${w.noWo&&canWrite!==false?`<span class="rbtns">${w.st!=="done"?`<button class="btn ghost" data-mdone="${esc(w.wo)}" title="無 WO（管制台大洗／小洗等）：現場做完就回報；之後完工檔有同機同卡號紀錄會自動對上">完工</button>`:w.doneManual?`<button class="btn ghost" data-mundo="${esc(w.wo)}">取消回報</button>`:""}</span>`:""}${!w.noWo&&canWrite!==false?`<span class="rbtns">${w.st!=="done"&&(w.st!=="queue"||w.auto)&&(w.sched||w.auto||w.st==="over")?`<button class="btn ghost" data-mdone="${esc(w.wo)}">完工</button>`:""}${w.st==="done"&&w.doneManual?`<button class="btn ghost" data-mundo="${esc(w.wo)}">取消回報</button>`:""}${w.sched&&w.st!=="done"?`<button class="btn ghost" data-ret="${esc(w.wo)}">退工</button>`:""}${w.st!=="done"&&w.st!=="queue"?`<button class="btn ghost" data-mat="${esc(w.wo)}">${w.wm?"料已到":"待料"}</button><button class="btn ghost" data-pz="${esc(w.wo)}">${w.holdR&&w.holdR.wt?"解除暫緩":"暫緩"}</button>`:""}<button class="btn ghost" data-fix="${esc(w.wo)}">改工單</button><button class="btn ghost del" data-del="${esc(w.wo)}" title="刪除這張工單（需填原因）">刪除</button></span>`:""}${w.noWo&&canWrite!==false?`<span class="rbtns"><button class="btn ghost del" data-del="${esc(w.wo)}">刪除</button></span>`:""}</td>
+    <td class="cl-st"><span class="pill ${s.c}">${s.t}</span>${miss}${w.noWo&&canWrite!==false?`<span class="rbtns">${w.st!=="done"?`<button class="btn ghost" data-mdone="${esc(w.wo)}" title="無 WO（管制台大洗／小洗等）：現場做完就回報；之後完工檔有同機同卡號紀錄會自動對上">完工</button>`:w.doneManual?`<button class="btn ghost" data-mundo="${esc(w.wo)}">取消回報</button>`:""}</span>`:""}${!w.noWo&&canWrite!==false?`<span class="rbtns">${w.st!=="done"&&(w.st!=="queue"||w.auto)&&(w.sched||w.auto||w.st==="over")?`<button class="btn ghost" data-mdone="${esc(w.wo)}">完工</button>`:""}${w.st==="done"&&w.doneManual?`<button class="btn ghost" data-mundo="${esc(w.wo)}">取消回報</button>`:""}${w.sched&&w.st!=="done"?`<button class="btn ghost" data-ret="${esc(w.wo)}">退工</button>`:""}${w.st!=="done"&&w.st!=="queue"?`<button class="btn ghost" data-mat="${esc(w.wo)}">${w.wm?"料已到":"待料"}</button><button class="btn ghost" data-pz="${esc(w.wo)}">${w.holdR&&w.holdR.wt?"解除暫緩":"暫緩"}</button>`:""}<button class="btn ghost" data-fix="${esc(w.wo)}">改工單</button>${w.st!=="done"?`<button class="btn ghost" data-wochg="${esc(w.wo)}">變更 WO</button>`:""}<button class="btn ghost del" data-del="${esc(w.wo)}" title="刪除這張工單（需填原因）">刪除</button></span>`:""}${w.noWo&&canWrite!==false?`<span class="rbtns"><button class="btn ghost del" data-del="${esc(w.wo)}">刪除</button></span>`:""}</td>
     <td class="mono cl-wo">${w.noWo?`<button class="wo-link" data-hist="${esc(w.wo)}" style="color:var(--accent);font-weight:600">無 WO</button><span class="days">待修管發工</span>`:`<button class="wo-link" data-hist="${esc(w.wo)}" title="查看這張工單的異動歷程">${esc(w.wo)}</button>${w.fromNoWo?`<span class="days">原「無 WO」已發工</span>`:""}`}</td>
     <td class="nw cl-tail"><span class="mono">${esc(w.tail)}</span><span class="days">${esc(w.type)} · ${esc((w.month||"").replace("-","/"))}</span></td>
     <td class="cl-cat" style="white-space:nowrap;font-size:12px">${esc(w.pkgType||"")}${w.period?`<span class="days">MR #${esc(w.period)}</span>`:""}</td>
