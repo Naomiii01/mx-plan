@@ -483,6 +483,26 @@ body.v-day #secLoad,body.v-month #secLoad{display:none}
 .dsec h3{margin:0;font-size:15.5px;font-weight:700}
 .dsec summary .ct{font-family:var(--mono);font-size:13px;color:var(--ink-2);background:var(--panel-2);border-radius:999px;padding:0 8px}
 .dsec summary .hint{display:none}
+
+/* 11/6 手機精簡：上方只留待處理／今日控管／退工，其他功能收進 ☰ 與「更多」 */
+.m-only{display:none!important}
+@media (max-width:640px){
+  .m-only{display:inline-flex!important}
+  body:not(.m-menu) .top .actions{display:none}
+  .top .actions{gap:6px}
+  body:not(.m-tabs) #vtabs>button[data-view]:not([data-view="todo"]):not([data-view="day"]):not([data-view="ret"]):not(.on){display:none}
+  #vtabs{flex-wrap:wrap}
+  #vtabs>button{padding:8px 10px;font-size:14px}
+  .d-kpi{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:1px}
+  .d-kpi .stat{flex:0 0 42%;scroll-snap-align:start}
+  .d-kpi .stat .note{display:none}
+  .td-gh .td-why{display:none}
+  .td-r{padding:10px}
+  .td-a .btn.sm{padding:7px 12px;font-size:13.5px}
+  .td-a .btn.ok{flex:1;justify-content:center}
+  .dw-a .btn.ok{min-width:84px;justify-content:center}
+  .rc-grid{grid-template-columns:1fr}
+}
 /* 11/3 精簡：快速改期／更多選單／已完工收合／退工卡片 */
 .pop{position:absolute;z-index:70;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.18);padding:8px;min-width:200px;max-width:calc(100vw - 24px)}
 .pop .pop-t{font-size:12px;color:var(--ink-3);margin:0 2px 6px}
@@ -1012,6 +1032,7 @@ body:not(.v-dsp) #secDsp{display:none}
         <h1>月維修計畫管控表</h1>
         <span class="sync wait" id="sync">連線中…</span>
         <span class="sync" id="whoami" hidden></span>
+        <button class="btn ghost m-only" id="mMenu" aria-label="更多功能" style="margin-left:auto">☰ 功能</button>
       </div>
       <div class="actions">
         <button class="btn primary" id="btnPlan"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 11V2M4.5 5.5 8 2l3.5 3.5M2.5 11v2.5h11V11"/></svg>匯入工單</button>
@@ -1028,7 +1049,7 @@ body:not(.v-dsp) #secDsp{display:none}
 
   <section class="gate" id="gate" hidden></section>
   <div id="banners"></div>
-  <nav class="vtabs" id="vtabs" aria-label="檢視"><button data-view="todo">待處理 <span class="ct"></span></button><button data-view="day">今日控管 <span class="ct"></span></button><button data-view="ret">退工 <span class="ct"></span></button><button data-view="stn">駐站</button><button data-view="pri">優先排工</button><button data-view="dsp">派遣檢查</button><button data-view="load">月負荷</button><button data-view="month">月計畫總覽</button><button data-view="kpi">考核統計</button><div class="gsearch"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input type="search" id="gq" placeholder="搜尋 WO／卡號／機號／工作名稱" aria-label="搜尋工單" autocomplete="off"><div class="gres" id="gres" hidden></div></div></nav>
+  <nav class="vtabs" id="vtabs" aria-label="檢視"><button data-view="todo">待處理 <span class="ct"></span></button><button data-view="day">今日控管 <span class="ct"></span></button><button data-view="ret">退工 <span class="ct"></span></button><button data-view="stn">駐站</button><button data-view="pri">優先排工</button><button data-view="dsp">派遣檢查</button><button data-view="load">月負荷</button><button data-view="month">月計畫總覽</button><button data-view="kpi">考核統計</button><div class="gsearch"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input type="search" id="gq" placeholder="搜尋 WO／卡號／機號／工作名稱" aria-label="搜尋工單" autocomplete="off"><div class="gres" id="gres" hidden></div></div><button class="m-only" id="mTabs" type="button">更多 ▾</button></nav>
   <section class="blk" id="secDay"></section>
   <section class="blk" id="secLoad"></section>
   <section class="blk" id="secKpi"></section>
@@ -4520,6 +4541,10 @@ function woChangeDlg(wo){
   };
 }
 document.body.addEventListener("click",e=>{ const b=e.target.closest("[data-wochg]"); if(b){ e.preventDefault(); e.stopPropagation(); closePop(); woChangeDlg(b.dataset.wochg); } });
+
+document.addEventListener("click",e=>{ if(e.target.closest("#mMenu")){ document.body.classList.toggle("m-menu"); return; }
+  if(e.target.closest("#mTabs")){ const on=document.body.classList.toggle("m-tabs"); e.target.closest("#mTabs").textContent=on?"收合 ▴":"更多 ▾"; return; }
+  if(e.target.closest(".top .actions .btn")&&matchMedia("(max-width:640px)").matches) document.body.classList.remove("m-menu"); });
 /* ---------- 11/3 精簡操作：一鍵完工、點日期改期、⋯ 更多選單 ---------- */
 function qDoneDate(w){ const T=todayISO(), D=ui.view==="day"&&ui.day&&ui.day<T?ui.day:T; return w.sched&&w.sched<D?w.sched:D; }
 let POP=null;
