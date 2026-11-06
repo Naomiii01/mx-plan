@@ -2546,7 +2546,7 @@ function renderPri(){
   const keys=Object.keys(PRI).filter(k=>cnt(k).length);
   el.innerHTML=`<div class="blk-h"><h2>優先排工</h2><span class="hint">先排長工時、指定授權／SKILL、水消、ENG WASH、BSI、AD／SB；送修件由修管依料到指定。水消只排 日～四、限 TPE（紅休／不收水日問修管）；A330 ENG WASH 需 TPE 地停 ≥13h。未排定的在前，依 DUE 排序。類別由備註、工作名稱與工時自動判斷，可按「標記」補充或取消</span></div>
     <div class="dsp-ctl"><select id="priM">${months.map(m=>`<option ${m===mo?"selected":""} value="${m}">${m.replace("-","/")} 計畫</option>`).join("")}</select>
-      <button class="btn sm" id="wwStat" style="margin-left:auto">水消／ENG WASH 統計</button><span class="seg"><button class="chip ${!ty?"on":""}" data-prit="">全機隊</button>${types.map(t=>`<button class="chip ${ty===t?"on":""}" data-prit="${esc(t)}">${esc(t)}</button>`).join("")}</span></div>
+      ${canWrite!==false?`<button class="btn primary sm" data-suggest="${esc(ty)}" style="margin-left:auto">✦ 自動建議排工</button>`:""}<button class="btn sm" id="wwStat" ${canWrite!==false?"":`style="margin-left:auto"`}>水消／ENG WASH 統計</button><span class="seg"><button class="chip ${!ty?"on":""}" data-prit="">全機隊</button>${types.map(t=>`<button class="chip ${ty===t?"on":""}" data-prit="${esc(t)}">${esc(t)}</button>`).join("")}</span></div>
     <div class="chk-pills" style="margin:6px 0 12px"><button class="chk-p ${!cat?"on":""}" data-pric="">全部<b>${L.length}</b></button>${keys.map(k=>`<button class="chk-p ${cat===k?"on":""}" data-pric="${k}" title="未排定 ${un(k)} 張"><span>${esc(PRI[k].t)}</span><b>${cnt(k).length}</b>${un(k)?`<small class="neg">未排 ${un(k)}</small>`:""}</button>`).join("")}</div>
     <h3 class="pri-h">我們優先安排 <span class="muted">${pl.length} 張，未排定 ${pl.filter(x=>!x.w.sched).length}</span></h3>${tbl(pl,"這個月沒有需要優先安排的工單")}
     <h3 class="pri-h">修管指定（料到安排） <span class="muted">${mx.length} 張，未排定 ${mx.filter(x=>!x.w.sched).length}</span></h3>${tbl(mx,"沒有送修件工單")}`;
@@ -4271,6 +4271,62 @@ async function manualDoneDlg(wo){
 
 
 
+
+/* ---------- 自動建議排工（11/6）：還沒排、DUE 在近期的工單，依航班過夜、HMV、每日工時與長工時上限，建議一個日期；看過再接受 ---------- */
+function suggestPlan(o){ o=o||{}; const {all}=derive(), T=todayISO(), H=+(o.days||21), lastD=addDays(T,H);
+  const cap=+(M.config.mhCap||0), lmax=+(M.config.longMax||3), buf=+(o.buf==null?2:o.buf);
+  const ty=o.type||"", L=all.filter(w=>(!ty||w.type===ty)&&!w.sched&&!w.auto&&!w.noWo&&!w.removed&&!w.hold&&!w.wm&&!w.short&&!w.shortQueue&&!["done","hmv","queue","miss"].includes(w.st));
+  const due=w=>w.hardD||w.effDue||"";
+  const C=L.filter(w=>due(w)&&due(w)<=lastD).sort((a,b)=>due(a).localeCompare(due(b))||(priOf(b).length-priOf(a).length)||a.tail.localeCompare(b.tail));
+  /* 每天（每機型）已排的工時與長工時張數；接受前的建議也算進去，避免全擠同一天 */
+  const load={}; const key=(t,d)=>t+"|"+d; const addL=(w,d)=>{ const k=key(w.type,d), x=load[k]=load[k]||{mh:0,lg:0,n:0}; const h=mhOf(w); x.mh+=h||0; x.n++; if(isLong(w,h)) x.lg++; };
+  for(const w of all){ if(w.st==="done"||w.removed||w.st==="hmv") continue; const d=w.sched||(w.auto?w.projD:""); if(d&&d>=T&&d<=lastD) addL(w,d); }
+  const busy={}, tmh={}; for(const w of all){ if(w.st==="done"||w.removed) continue; const d=w.sched||(w.auto?w.projD:""); if(d){ busy[w.tail+"|"+d]=(busy[w.tail+"|"+d]||0)+1; tmh[w.tail+"|"+d]=(tmh[w.tail+"|"+d]||0)+(mhOf(w)||1); } }
+  const out=[];
+  for(const w of C){ const D=due(w), sts=flStations(w,((((M.sched[shardOf(w.wo)]||{}).e||{})[w.wo])||{}).n), h=mhOf(w), lg=isLong(w,h);
+    const from=[D<=addDays(T,buf)?T:addDays(T,1),w.start||""].sort().pop();  /* 今天的已經排好：未逾期的從明天起建議 */ let to=D<T?addDays(T,3):addDays(D,-buf); if(to<from) to=D<from?addDays(from,3):D; if(to>lastD) to=lastD;  /* 快到期（buffer 內）：最晚排到 DUE 當天 */
+    const cands=[]; for(let d=from; d<=to; d=addDays(d,1)){
+      if(hmvAt(w.tail,d)) continue; let why="", fw=null;
+      if(flCovers(w.tail,d)){ fw=flWork(w.tail,d,sts); if(!fw) continue; why=`${FLK[fw.kind]||"地停"} ${fw.st} ${fw.h?Math.round(fw.h)+"h":""}`.trim(); if(lg&&fw.h&&fw.h<6) continue; }
+      else { const x=stintAt(w.tail,d); if(x&&!sts.includes(String(x.station||"").toUpperCase())) continue; why=Object.keys(M.flights||{}).length?"航班未涵蓋這天":""; }
+      const l=load[key(w.type,d)]||{mh:0,lg:0,n:0}; if(cap&&l.mh+(h||0)>cap) continue; if(lg&&l.lg>=lmax) continue;
+      /* 同一架同一晚：工時不能超過地停時間（沒有航班資料時以 10 小時估） */
+      const tk=w.tail+"|"+d, winH=fw&&fw.h?fw.h:10; if((tmh[tk]||0)+(h||1)>winH) continue;
+      cands.push({d,why,l,bund:busy[tk]||0,fw}); }
+    if(!cands.length){ out.push({w,d:"",why:D<T?"已逾期，近 3 天找不到可做的時段":"DUE 前找不到可做的時段（航班／HMV／工時上限）"}); continue; }
+    /* 選法（分數低者）：當天該機型工時少、同一架當晚已有工作可一起做（加分）；已逾期越早越好，未逾期稍微偏向接近 DUE（不浪費間隔） */
+    const od=D<T, n=cands.length, sc=(c,i)=>c.l.mh+(h||1)-(c.bund?3:0)+(od?i*2:(n-1-i)*0.3);
+    const c=cands.map((c,i)=>({c,v:sc(c,i)})).sort((a,b)=>a.v-b.v)[0].c; addL(w,c.d); const tk=w.tail+"|"+c.d; busy[tk]=(busy[tk]||0)+1; tmh[tk]=(tmh[tk]||0)+(h||1);
+    out.push({w,d:c.d,why:[c.why,c.bund?`這架當天已有 ${c.bund} 張`:"",`當天${w.type} ${Math.round(c.l.mh*10)/10}h`].filter(Boolean).join(" · ")}); }
+  return out; }
+function suggestDlg(type){
+  if(canWrite===false){ showMsg("沒有編輯權限","<p>你目前只能檢視。</p>"); return; }
+  let days=+(ui.sgDays||21), ty=type||ui.tdType||"";
+  const draw=()=>{ const R=suggestPlan({days,type:ty}); const ok=R.filter(r=>r.d), no=R.filter(r=>!r.d);
+    const types=typeOrder().filter(t=>derive().all.some(w=>w.type===t));
+    const d=openDlg(`<h3>自動建議排工</h3><p class="muted" style="font-size:12.5px;margin:0 0 8px">還沒排、DUE 在 ${days} 天內的工單。依航班過夜（長工時要 6 小時以上）、HMV、每日工時${+(M.config.mhCap||0)?` ${M.config.mhCap}h`:""}與長工時 ${+(M.config.longMax||3)} 張上限挑日期：同一架當天已有工作的優先一起做，其次挑工時較少、較接近 DUE 的日子。只是建議，勾選後才會排入。</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap"><span class="seg"><button class="chip ${!ty?"on":""}" data-sgt="">全機隊</button>${types.map(t=>`<button class="chip ${ty===t?"on":""}" data-sgt="${esc(t)}">${esc(t)}</button>`).join("")}</span>
+        <label style="font-size:13px">DUE 在 <select id="sgDays">${[7,14,21,30,45].map(n=>`<option ${n===days?"selected":""}>${n}</option>`).join("")}</select> 天內</label></div>
+      ${ok.length?`<div class="tbl-wrap" style="max-height:55vh;overflow:auto"><table class="sg-tbl"><thead><tr><th><input type="checkbox" id="sgAll" checked></th><th>機號</th><th>工作</th><th>MH</th><th>DUE</th><th>建議日</th><th>理由</th></tr></thead><tbody>
+        ${ok.map((r,i)=>`<tr><td><input type="checkbox" data-sgi="${i}" checked></td><td class="mono">${esc(r.w.tail)}</td><td><b class="mono">${esc(cardOf(r.w))}</b> <span class="muted mono" style="font-size:11.5px">WO ${esc(r.w.wo)}</span><div style="font-size:12px;color:var(--ink-3);max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.w.title||"")}</div></td><td class="mono">${mhOf(r.w)??"—"}</td><td class="mono" style="white-space:nowrap">${esc(fmtD(r.w.hardD||r.w.effDue||"").slice(5))}${r.w.left!=null&&r.w.left<0?` <span class="mini warn">逾 ${-r.w.left}</span>`:""}</td><td><input type="date" data-sgd="${i}" value="${r.d}" style="border:1px solid var(--line);border-radius:6px;padding:3px 6px;background:var(--panel-2)"></td><td style="font-size:12px;color:var(--ink-2)">${esc(r.why)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty sm">這段期間沒有需要排的工單。</div>`}
+      ${no.length?`<details style="margin-top:8px"><summary style="font-size:13px;color:var(--red)">找不到時段 ${no.length} 張（需要你手動處理）</summary><ul style="font-size:12.5px;margin:6px 0">${no.map(r=>`<li><span class="mono">${esc(r.w.tail)} ${esc(cardOf(r.w))}</span> DUE ${esc(fmtD(r.w.hardD||r.w.effDue||"").slice(5))}：${esc(r.why)}</li>`).join("")}</ul></details>`:""}
+      <div class="foot"><button class="btn" data-n>關閉</button>${ok.length?`<button class="btn primary" data-y>排入勾選的 <span id="sgN">${ok.length}</span> 張</button>`:""}</div>`);
+    d.style.maxWidth="min(1080px,calc(100vw - 24px))"; d.style.width="1080px";
+    d.querySelectorAll("[data-sgt]").forEach(b=>b.onclick=()=>{ ty=b.dataset.sgt; draw(); });
+    d.querySelector("#sgDays").onchange=e=>{ days=+e.target.value; ui.sgDays=days; draw(); };
+    d.querySelector("[data-n]").onclick=closeDlg;
+    const cnt=()=>{ const n=d.querySelectorAll("[data-sgi]:checked").length, e=d.querySelector("#sgN"); if(e) e.textContent=n; };
+    const all_=d.querySelector("#sgAll"); if(all_) all_.onchange=()=>{ d.querySelectorAll("[data-sgi]").forEach(c=>c.checked=all_.checked); cnt(); };
+    d.querySelectorAll("[data-sgi]").forEach(c=>c.onchange=cnt);
+    const y=d.querySelector("[data-y]"); if(y) y.onclick=async()=>{ const pick=[...d.querySelectorAll("[data-sgi]:checked")].map(c=>{ const i=+c.dataset.sgi; return {w:ok[i].w,d:d.querySelector(`[data-sgd="${i}"]`).value}; }).filter(x=>x.d);
+      if(!pick.length) return; y.disabled=true; y.textContent="排入中…";
+      for(const x of pick){ await saveSched(x.w.wo,{d:x.d}); }
+      B.audit({act:"自動建議排工",wo:pick.map(x=>x.w.wo).join(",").slice(0,300),to:`排入 ${pick.length} 張`});
+      closeDlg(); invalidate(); render(); toast(`已排入 ${pick.length} 張`,[["復原",async()=>{ for(const x of pick) await saveSched(x.w.wo,{d:""}); invalidate(); render(); }]]); };
+  };
+  draw();
+}
+document.addEventListener("click",e=>{ const b=e.target.closest("[data-suggest]"); if(b){ e.preventDefault(); suggestDlg(b.dataset.suggest||""); } });
 /* ---------- 待處理：只列今天需要你決定的事，處理完就消失（11/6） ---------- */
 const SKIPK=()=>"mxplan.skip."+todayISO();
 function skipSet(){ try{ return new Set(JSON.parse(localStorage.getItem(SKIPK())||"[]")); }catch(e){ return new Set(); } }
@@ -4320,7 +4376,7 @@ function renderTodo(){
   const G=todoGroups(), n=G.reduce((s,g)=>s+g.items.length,0), lim=12;
   ui.tdOpen=ui.tdOpen||{};
   const types=typeOrder().filter(t=>derive().all.some(w=>w.type===t));
-  el.innerHTML=`<div class="td-hd"><h2>待處理</h2><span class="muted" style="font-size:13px">${esc(dayLabel(todayISO()))} · ${n?`還有 ${n} 項需要你決定`:"都處理完了"}</span><span style="flex:1"></span><div class="fleet-tabs"><button class="chip ${!ui.tdType?"on":""}" data-tdty="">全機隊</button>${types.map(t=>`<button class="chip ${ui.tdType===t?"on":""}" data-tdty="${esc(t)}">${esc(t)}</button>`).join("")}</div></div>
+  el.innerHTML=`<div class="td-hd"><h2>待處理</h2><span class="muted" style="font-size:13px">${esc(dayLabel(todayISO()))} · ${n?`還有 ${n} 項需要你決定`:"都處理完了"}</span><span style="flex:1"></span>${canWrite!==false?`<button class="btn primary sm" data-suggest="">✦ 自動建議排工</button>`:""}<div class="fleet-tabs"><button class="chip ${!ui.tdType?"on":""}" data-tdty="">全機隊</button>${types.map(t=>`<button class="chip ${ui.tdType===t?"on":""}" data-tdty="${esc(t)}">${esc(t)}</button>`).join("")}</div></div>
     ${n?G.map(g=>{ const all_=ui.tdOpen[g.id], L=all_?g.items:g.items.slice(0,lim);
       return `<div class="td-g ${g.c}"><div class="td-gh"><h3>${esc(g.title)}</h3><span class="ct">${g.items.length}</span><span class="td-why">${esc(g.why)}</span>${g.skipped?`<span class="td-why" style="margin-left:auto">今天已略過 ${g.skipped} 項</span>`:""}</div>${L.map(x=>todoRow(g,x)).join("")}${g.items.length>lim?`<button class="td-more" data-tdall="${g.id}">${all_?"收合":`再顯示 ${g.items.length-lim} 項`}</button>`:""}</div>`; }).join("")
     :`<div class="td-ok">✓ 目前沒有需要處理的例外。<br><span class="muted" style="font-size:13px">要看今天排了什麼，到「今日控管」。</span></div>`}`;
