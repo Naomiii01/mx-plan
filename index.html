@@ -4327,6 +4327,47 @@ function suggestDlg(type){
   draw();
 }
 document.addEventListener("click",e=>{ const b=e.target.closest("[data-suggest]"); if(b){ e.preventDefault(); suggestDlg(b.dataset.suggest||""); } });
+
+/* ---------- 產生寄出清單（11/6）：下週 DUE、退工待回覆、待料 → 複製貼到 Outlook（保留表格）或下載 Excel ---------- */
+function mailLists(kind,o){ const {all}=derive(), T=todayISO(), ty=o.type||"", inT=w=>!ty||w.type===ty;
+  if(kind==="due"){ const to=addDays(T,o.days||7);
+    const L=all.filter(w=>inT(w)&&w.st!=="done"&&!w.removed&&!w.noWo&&w.st!=="hmv"&&(w.hardD||w.effDue)&&(w.hardD||w.effDue)<=to).sort((a,b)=>typeOrder().indexOf(a.type)-typeOrder().indexOf(b.type)||a.tail.localeCompare(b.tail)||String(a.hardD||a.effDue).localeCompare(String(b.hardD||b.effDue)));
+    return {title:`${ty||"全機隊"} ${fmtD(T).slice(5)}～${fmtD(to).slice(5)} 到期工單`,H:["機號","WO","卡號","工作","DUE","排定","狀態"],
+      rows:L.map(w=>[w.tail,w.wo,cardOf(w),w.title||"",fmtD(w.hardD||w.effDue),w.sched?fmtD(w.sched):(w.auto&&w.projD?"預排 "+fmtD(w.projD):"未排"),w.hold?"暫緩":w.wm?"待料"+(w.eta?" "+fmtD(w.eta).slice(5):""):w.retPending?"退工待重排":(w.left!=null&&w.left<0?`逾期 ${-w.left} 天`:"")])}; }
+  if(kind==="ret"){ const last={}; recList("returns").forEach(r=>{ if(r.wo&&!last[r.wo]) last[r.wo]=r; });
+    const L=Object.values(last).map(r=>({r,w:all.find(x=>x.wo===r.wo)})).filter(({r,w})=>w&&inT(w)&&w.st!=="done"&&!r.closed).sort((a,b)=>String(a.r.date).localeCompare(String(b.r.date)));
+    return {title:`${ty||"全機隊"} 退工未結案清單（${fmtD(T)}）`,H:["機號","WO","卡號","工作","退工日","原因","等待","最新進度","DUE"],
+      rows:L.map(({r,w})=>{ const fu=(r.follow||[]).slice(-1)[0]; return [w.tail,w.wo,cardOf(w),w.title||r.title||"",fmtD(r.date||""),r.reason||"",clarWait(r)?(r.clarText||CLAR[r.clar]||"待澄清"):(w.sched?"已重排 "+fmtD(w.sched).slice(5):"待重排"),fu?`${fmtD(fu.date||"").slice(5)} ${fu.party?fu.party+"：":""}${fu.note||""}`:(r.note||""),fmtD(w.hardD||w.effDue||"")]; })}; }
+  if(kind==="mat"){ const L=all.filter(w=>inT(w)&&w.wm&&w.st!=="done"&&!w.removed).sort((a,b)=>String(a.eta||"9").localeCompare(String(b.eta||"9")));
+    return {title:`${ty||"全機隊"} 待料工單（${fmtD(T)}）`,H:["機號","WO","卡號","工作","料號／說明","預計到料","DUE"],
+      rows:L.map(w=>{ const sc=((M.sched[shardOf(w.wo)]||{}).e||{})[w.wo]||{}; return [w.tail,w.wo,cardOf(w),w.title||"",sc.mn||"",w.eta?fmtD(w.eta):"未定",fmtD(w.hardD||w.effDue||"")]; })}; }
+  return {title:"",H:[],rows:[]}; }
+function mailListDlg(kind0){
+  let kind=kind0||"due", days=7, ty=ui.tdType||"";
+  const KN={due:"即將到期",ret:"退工未結案",mat:"待料"};
+  const draw=()=>{ const X=mailLists(kind,{days,type:ty}); const types=typeOrder().filter(t=>derive().all.some(w=>w.type===t));
+    const tbl=`<table style="border-collapse:collapse;font-family:Arial,'Microsoft JhengHei',sans-serif;font-size:12px"><thead><tr>${X.H.map(h=>`<th style="border:1px solid #999;background:#eee;padding:4px 6px;text-align:left">${esc(h)}</th>`).join("")}</tr></thead><tbody>${X.rows.map(r=>`<tr>${r.map(c=>`<td style="border:1px solid #999;padding:4px 6px;vertical-align:top">${esc(String(c))}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+    const d=openDlg(`<h3>產生寄出清單</h3>
+      <div class="row" style="gap:8px;flex-wrap:wrap"><span class="seg">${Object.entries(KN).map(([k,t])=>`<button class="chip ${kind===k?"on":""}" data-mlk="${k}">${t}</button>`).join("")}</span>
+        <span class="seg"><button class="chip ${!ty?"on":""}" data-mlt="">全機隊</button>${types.map(t=>`<button class="chip ${ty===t?"on":""}" data-mlt="${esc(t)}">${esc(t)}</button>`).join("")}</span>
+        ${kind==="due"?`<label style="font-size:13px">未來 <select id="mlDays">${[3,7,14,21,30].map(n=>`<option ${n===days?"selected":""}>${n}</option>`).join("")}</select> 天</label>`:""}</div>
+      <p style="margin:8px 0 4px"><b id="mlTitle">${esc(X.title)}</b> <span class="muted">${X.rows.length} 筆</span></p>
+      <div id="mlPrev" style="max-height:50vh;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px;background:#fff;color:#111">${X.rows.length?tbl:`<p style="margin:8px">沒有資料</p>`}</div>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">「複製表格」後直接在 Outlook 信件裡貼上，會保留表格格式。</p>
+      <div class="foot"><button class="btn" data-n>關閉</button>${X.rows.length?`<button class="btn" data-mlx>下載 Excel</button><button class="btn primary" data-mlc>複製表格</button>`:""}</div>`);
+    d.style.maxWidth="min(1100px,calc(100vw - 24px))"; d.style.width="1100px";
+    d.querySelectorAll("[data-mlk]").forEach(b=>b.onclick=()=>{ kind=b.dataset.mlk; draw(); });
+    d.querySelectorAll("[data-mlt]").forEach(b=>b.onclick=()=>{ ty=b.dataset.mlt; draw(); });
+    const sd=d.querySelector("#mlDays"); if(sd) sd.onchange=e=>{ days=+e.target.value; draw(); };
+    d.querySelector("[data-n]").onclick=closeDlg;
+    const c=d.querySelector("[data-mlc]"); if(c) c.onclick=async()=>{ const html=`<p><b>${esc(X.title)}</b></p>`+tbl, txt=[X.title,X.H.join("\t"),...X.rows.map(r=>r.join("\t"))].join("\n");
+      try{ if(window.ClipboardItem&&navigator.clipboard&&navigator.clipboard.write) await navigator.clipboard.write([new ClipboardItem({"text/html":new Blob([html],{type:"text/html"}),"text/plain":new Blob([txt],{type:"text/plain"})})]); else await navigator.clipboard.writeText(txt); toast("已複製，到 Outlook 貼上即可"); }
+      catch(e){ const r=document.createRange(); r.selectNodeContents(d.querySelector("#mlPrev")); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); try{ document.execCommand("copy"); toast("已複製，到 Outlook 貼上即可"); }catch(x){ toast("瀏覽器不允許自動複製：表格已選取，請按 Ctrl+C"); } } };
+    const x=d.querySelector("[data-mlx]"); if(x) x.onclick=()=>{ if(!window.XLSX){ toast("Excel 元件尚未載入"); return; } const wb=XLSX.utils.book_new(); const ws=XLSX.utils.aoa_to_sheet([[X.title],X.H,...X.rows]); ws["!cols"]=X.H.map(h=>({wch:/工作|進度/.test(h)?44:/料號/.test(h)?24:12})); XLSX.utils.book_append_sheet(wb,ws,KN[kind]); saveWb(wb,`${KN[kind]}清單_${todayISO().replace(/-/g,"")}.xlsx`); };
+  };
+  draw();
+}
+document.addEventListener("click",e=>{ const b=e.target.closest("[data-maillist]"); if(b){ e.preventDefault(); mailListDlg(b.dataset.maillist); } });
 /* ---------- 待處理：只列今天需要你決定的事，處理完就消失（11/6） ---------- */
 const SKIPK=()=>"mxplan.skip."+todayISO();
 function skipSet(){ try{ return new Set(JSON.parse(localStorage.getItem(SKIPK())||"[]")); }catch(e){ return new Set(); } }
@@ -4376,7 +4417,7 @@ function renderTodo(){
   const G=todoGroups(), n=G.reduce((s,g)=>s+g.items.length,0), lim=12;
   ui.tdOpen=ui.tdOpen||{};
   const types=typeOrder().filter(t=>derive().all.some(w=>w.type===t));
-  el.innerHTML=`<div class="td-hd"><h2>待處理</h2><span class="muted" style="font-size:13px">${esc(dayLabel(todayISO()))} · ${n?`還有 ${n} 項需要你決定`:"都處理完了"}</span><span style="flex:1"></span>${canWrite!==false?`<button class="btn primary sm" data-suggest="">✦ 自動建議排工</button>`:""}<div class="fleet-tabs"><button class="chip ${!ui.tdType?"on":""}" data-tdty="">全機隊</button>${types.map(t=>`<button class="chip ${ui.tdType===t?"on":""}" data-tdty="${esc(t)}">${esc(t)}</button>`).join("")}</div></div>
+  el.innerHTML=`<div class="td-hd"><h2>待處理</h2><span class="muted" style="font-size:13px">${esc(dayLabel(todayISO()))} · ${n?`還有 ${n} 項需要你決定`:"都處理完了"}</span><span style="flex:1"></span>${canWrite!==false?`<button class="btn primary sm" data-suggest="">✦ 自動建議排工</button>`:""}<button class="btn sm" data-maillist="due">✉ 產生寄出清單</button><div class="fleet-tabs"><button class="chip ${!ui.tdType?"on":""}" data-tdty="">全機隊</button>${types.map(t=>`<button class="chip ${ui.tdType===t?"on":""}" data-tdty="${esc(t)}">${esc(t)}</button>`).join("")}</div></div>
     ${n?G.map(g=>{ const all_=ui.tdOpen[g.id], L=all_?g.items:g.items.slice(0,lim);
       return `<div class="td-g ${g.c}"><div class="td-gh"><h3>${esc(g.title)}</h3><span class="ct">${g.items.length}</span><span class="td-why">${esc(g.why)}</span>${g.skipped?`<span class="td-why" style="margin-left:auto">今天已略過 ${g.skipped} 項</span>`:""}</div>${L.map(x=>todoRow(g,x)).join("")}${g.items.length>lim?`<button class="td-more" data-tdall="${g.id}">${all_?"收合":`再顯示 ${g.items.length-lim} 項`}</button>`:""}</div>`; }).join("")
     :`<div class="td-ok">✓ 目前沒有需要處理的例外。<br><span class="muted" style="font-size:13px">要看今天排了什麼，到「今日控管」。</span></div>`}`;
@@ -4437,7 +4478,7 @@ function renderRet(){
   const sec=(k,t,L,lazy)=>`<div class="rc-sec"><h3>${t}<span class="ct">${L.length}</span>${lazy&&L.length?`<button class="btn ghost sm" data-rcshow="${k}">${ui.retShow===k?"收合":"展開"}</button>`:""}</h3>${L.length?(lazy&&ui.retShow!==k?"":`<div class="rc-grid">${L.map(card).join("")}</div>`):`<div class="empty sm">沒有項目</div>`}</div>`;
   const types=typeOrder().filter(t=>Object.values(last).some(r=>(byWo[r.wo]?byWo[r.wo].type:r.type)===t));
   el.innerHTML=`<div class="rc-bar"><div class="fleet-tabs"><button class="chip ${!ty?"on":""}" data-rcty="">全機隊</button>${types.map(t=>`<button class="chip ${ty===t?"on":""}" data-rcty="${esc(t)}">${esc(t)}</button>`).join("")}</div>
-      <input id="rcQ" type="search" placeholder="搜尋機號、卡號、WO、原因…" value="${esc(ui.retQ||"")}"><span style="flex:1"></span>${canWrite!==false?`<button class="btn" data-retimp>匯入退工</button>`:""}</div>
+      <input id="rcQ" type="search" placeholder="搜尋機號、卡號、WO、原因…" value="${esc(ui.retQ||"")}"><span style="flex:1"></span><button class="btn" data-maillist="ret">✉ 退工清單</button>${canWrite!==false?`<button class="btn" data-retimp>匯入退工</button>`:""}</div>
     ${sec("pend","待重排",G.pend)}${sec("wait","待澄清（等工程／修管回覆）",G.wait)}${sec("track","已重排、待完工",G.track)}${sec("done","已完工／結案",G.done.slice(0,120),true)}`;
   const qi=$("#rcQ"); if(qi){ qi.oninput=()=>{ ui.retQ=qi.value; clearTimeout(qi._t); qi._t=setTimeout(()=>{ renderRet(); const n=$("#rcQ"); if(n){ n.focus(); n.setSelectionRange(n.value.length,n.value.length); } },250); }; }
 }
