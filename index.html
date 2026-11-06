@@ -4387,7 +4387,29 @@ document.addEventListener("click",e=>{
   const m=e.target.closest("[data-tdall]"); if(m){ ui.tdOpen=ui.tdOpen||{}; ui.tdOpen[m.dataset.tdall]=!ui.tdOpen[m.dataset.tdall]; renderTodo(); return; }
   const i=e.target.closest("[data-tdimp]"); if(i){ if(i.dataset.tdimp==="done"){ const f=$("#fileDone"); if(f) f.click(); } else { const b=$("#stnFl"); if(b) b.click(); else { ui.view="stn"; renderNow(); } } return; }
 });
-function healthIssues(){ return []; }
+/* ---------- 資料健康檢查（11/6）：系統比對後覺得不對勁的地方，列進「待處理」 ---------- */
+function healthIssues(){
+  const {all,shortRows,doneMap}=derive(), T=todayISO(), out=[];
+  const L=(k,html,btn)=>out.push({k,hc:true,html,btn});
+  const tag=(t,w)=>`<span class="tail-reg">${esc(w.tail)}</span><span class="c">${esc(cardOf(w))}</span><button class="wo-link mono w" data-hist="${esc(w.wo)}">WO ${esc(w.wo)}</button><span class="w" style="color:var(--ink-2)">${t}</span>`;
+  const open=all.filter(w=>w.st!=="done"&&!w.removed&&!w.noWo);
+  /* 1. 同機、同卡號、同序號（同發動機位置）有兩張以上未完工 → 可能重複 */
+  const G={}; for(const w of open){ if(w.short||w.shortQueue||w.st==="queue") continue; const sn=String(w.serial&&w.serial!==w.tail?w.serial:"").toUpperCase(); const k=[w.tail,cardOf(w).toUpperCase(),sn,enginePos(w)||"",w.due||""].join("|");  /* DUE 不同＝同卡號的不同期，不算重複 */ (G[k]=G[k]||[]).push(w); }
+  for(const [k,ws] of Object.entries(G)){ if(ws.length<2||!cardOf(ws[0])) continue; const s_=ws.slice().sort((a,b)=>String(a.wo).localeCompare(String(b.wo))), nw=s_[s_.length-1];
+    L("dup|"+k,`<span class="tail-reg">${esc(nw.tail)}</span><span class="c">${esc(cardOf(nw))}</span><span class="w" style="color:var(--ink-2)">可能重複：${s_.map(w=>`<button class="wo-link mono" data-hist="${esc(w.wo)}">WO ${esc(w.wo)}</button>${w.sched?`（排 ${esc(fmtD(w.sched).slice(5))}）`:""}`).join("、")} 都還沒完工</span>`,`<button class="btn sm" data-del="${esc(nw.wo)}">刪除 WO ${esc(nw.wo)}</button>`); }
+  /* 2. 排定日晚於 DUE */
+  for(const w of open){ const D=w.hardD||w.effDue; if(w.sched&&w.sched>=T&&D&&w.sched>D&&!w.hold) L("late|"+w.wo,tag(`排定 ${esc(fmtD(w.sched).slice(5))} 晚於 DUE ${esc(fmtD(D).slice(5))}`,w),`<button class="btn sm pick" data-pick="${esc(w.wo)}">改期 ▾</button>`); }
+  /* 3. 排在 HMV 期間（飛機在廠） */
+  for(const w of open){ if(w.sched&&w.sched>=T&&w.st!=="hmv"&&hmvAt(w.tail,w.sched)) L("hmv|"+w.wo,tag(`排定 ${esc(fmtD(w.sched).slice(5))} 飛機在 HMV`,w),`<button class="btn sm pick" data-pick="${esc(w.wo)}">改期 ▾</button>`); }
+  /* 4. 完工日在未來（檔案日期錯） */
+  for(const [wo,d] of Object.entries(doneMap||{})){ if(d&&d.date&&d.date>T){ const w=all.find(x=>x.wo===wo); if(w) L("fut|"+wo,tag(`完工日 ${esc(fmtD(d.date))} 在未來，檔案日期可能打錯`,w),w.doneManual?`<button class="btn sm" data-mundo="${esc(wo)}">取消回報</button>`:""); } }
+  /* 5. 新匯入的工作包沒有這張（檔案中消失），也沒排 */
+  for(const w of open){ if(w.st==="miss") L("miss|"+w.wo,tag(`最新工作包沒有這張${w.missingFile?`（${esc(w.missingFile)}）`:""}：已取消就刪除，還要做就排日期`,w),`<button class="btn sm" data-del="${esc(w.wo)}">刪除</button><button class="btn sm pick" data-pick="${esc(w.wo)}">排日期 ▾</button>`); }
+  /* 6. 短天期上次完工日在未來 */
+  for(const r of shortRows){ const ld=r.it.lastDone; if(ld&&ld>T) out.push({k:"shf|"+r.tail+"|"+r.key,hc:true,type:r.type,html:`<span class="tail-reg">${esc(r.tail)}</span><span class="c">${esc(r.it.task)}</span><span class="w" style="color:var(--ink-2)">短天期上次完工 ${esc(fmtD(ld))} 在未來</span>`,btn:`<input type="date" data-sl="${esc(r.tail)}|${esc(r.key)}" value="${esc(ld)}" max="${T}" style="border:1px solid var(--line);border-radius:6px;padding:3px 6px;background:var(--panel-2)">`}); }
+  out.forEach(x=>{ if(!x.type){ const m=/data-hist="([^"]+)"/.exec(x.html); const w=m&&all.find(y=>y.wo===m[1]); if(w) x.type=w.type; } });
+  return out;
+}
 /* ---------- 退工：獨立頁面，一張退工一張小卡（11/3） ---------- */
 function renderRet(){
   const el=$("#secRet"); if(!el) return; if(ui.view!=="ret"){ el.innerHTML=""; return; }
