@@ -506,6 +506,22 @@ body.v-day #secLoad,body.v-month #secLoad{display:none}
 .d-find{display:flex;gap:8px;align-items:center;margin:4px 0 2px}
 .d-find input{flex:1;max-width:340px;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:6px 10px;font-size:13px}
 .toast .tbtn{margin-left:12px;background:none;border:1px solid currentColor;color:inherit;border-radius:4px;padding:2px 8px;font-size:12.5px;cursor:pointer}
+.td-g{border:1px solid var(--line);border-radius:8px;background:var(--panel);margin-top:12px;overflow:hidden}
+.td-gh{display:flex;gap:8px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line-2);background:var(--panel-2)}
+.td-gh h3{font-size:14.5px;margin:0}.td-gh .td-why{font-size:12px;color:var(--ink-3)}
+.td-g.c-red .td-gh{border-left:4px solid var(--red)}.td-g.c-amber .td-gh{border-left:4px solid var(--amber)}.td-g.c-blue .td-gh{border-left:4px solid var(--cyan)}.td-g.c-gray .td-gh{border-left:4px solid var(--ink-3)}
+.td-r{display:flex;gap:10px;align-items:center;padding:8px 12px;border-top:1px solid var(--line-2);flex-wrap:wrap}
+.td-r:first-of-type{border-top:0}
+.td-m{flex:1;min-width:220px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.td-m .tail-reg{font-size:13.5px;min-width:64px}.td-m .c{font-family:var(--mono,monospace);font-weight:600;font-size:13px}
+.td-m .t{font-size:12.5px;color:var(--ink-2);max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.td-m .w{font-size:12px;color:var(--ink-3)}
+.td-a{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.td-skip{border:0;background:none;color:var(--ink-3);font-size:12px;cursor:pointer;padding:4px}
+.td-skip:hover{color:var(--ink)}
+.td-more{display:block;width:100%;border:0;border-top:1px solid var(--line-2);background:none;padding:7px;font-size:12.5px;color:var(--accent);cursor:pointer}
+.td-ok{margin-top:18px;padding:28px;text-align:center;border:1px dashed var(--line);border-radius:8px;color:var(--ink-2)}
+.td-hd{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}.td-hd h2{margin:0;font-size:18px}
 .rc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-top:8px}
 .rc{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
 .rc-h{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
@@ -690,6 +706,8 @@ body.v-dsp .wrap>section.blk:not(#secDsp),body.v-dsp #drop{display:none}
 body.v-pri .wrap>section.blk:not(#secPri),body.v-pri #drop{display:none}
 body.v-ret .wrap>section.blk:not(#secRet),body.v-ret #drop{display:none}
 body:not(.v-ret) #secRet{display:none}
+body.v-todo .wrap>section.blk:not(#secTodo),body.v-todo #drop{display:none}
+body:not(.v-todo) #secTodo{display:none}
 body.v-kpi .wrap>section.blk:not(#secKpi),body.v-kpi #drop{display:none}body:not(.v-kpi) #secKpi{display:none}
 .kp-t{width:100%;border-collapse:collapse;font-size:13px}.kp-t th,.kp-t td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}.kp-t tbody th{text-align:left;font-weight:500}
 .kp-t thead th{background:var(--panel-2);font-size:12.5px}.kp-t thead th:first-child{text-align:left}.kp-t .on{background:color-mix(in srgb,var(--accent) 9%,transparent)}.kp-t .tot{font-weight:700}
@@ -1010,7 +1028,7 @@ body:not(.v-dsp) #secDsp{display:none}
 
   <section class="gate" id="gate" hidden></section>
   <div id="banners"></div>
-  <nav class="vtabs" id="vtabs" aria-label="檢視"><button data-view="day">今日控管 <span class="ct"></span></button><button data-view="ret">退工 <span class="ct"></span></button><button data-view="stn">駐站</button><button data-view="pri">優先排工</button><button data-view="dsp">派遣檢查</button><button data-view="load">月負荷</button><button data-view="month">月計畫總覽</button><button data-view="kpi">考核統計</button><div class="gsearch"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input type="search" id="gq" placeholder="搜尋 WO／卡號／機號／工作名稱" aria-label="搜尋工單" autocomplete="off"><div class="gres" id="gres" hidden></div></div></nav>
+  <nav class="vtabs" id="vtabs" aria-label="檢視"><button data-view="todo">待處理 <span class="ct"></span></button><button data-view="day">今日控管 <span class="ct"></span></button><button data-view="ret">退工 <span class="ct"></span></button><button data-view="stn">駐站</button><button data-view="pri">優先排工</button><button data-view="dsp">派遣檢查</button><button data-view="load">月負荷</button><button data-view="month">月計畫總覽</button><button data-view="kpi">考核統計</button><div class="gsearch"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input type="search" id="gq" placeholder="搜尋 WO／卡號／機號／工作名稱" aria-label="搜尋工單" autocomplete="off"><div class="gres" id="gres" hidden></div></div></nav>
   <section class="blk" id="secDay"></section>
   <section class="blk" id="secLoad"></section>
   <section class="blk" id="secKpi"></section>
@@ -1018,6 +1036,7 @@ body:not(.v-dsp) #secDsp{display:none}
   <section class="blk" id="secDsp"></section>
   <section class="blk" id="secPri"></section>
   <section class="blk" id="secRet"></section>
+  <section class="blk" id="secTodo"></section>
   <div class="drop" id="drop">把 Excel 拖到這裡：工單檔、完工檔，或先前匯出的管控檔（會自動辨識）。Outlook 另存的信件檔（.txt／.msg／.eml）也可以拖進來，會自動分到「匯入退工」或「臨時工單」。</div>
 
   <section class="blk">
@@ -3615,9 +3634,9 @@ function renderNow0(){
   const af=[]; if(ui.tail) af.push(["tail","機號 "+ui.tail]); if(ui.status&&!ST[ui.status]) ui.status=""; if(ui.status) af.push(["status",ST[ui.status].t]); if(ui.check){const c=checksOf(all).find(c=>c.k===ui.check); if(c) af.push(["check",c.t]);}
   $("#activeF").innerHTML=af.map(([k,t])=>`<button class="tag" data-clr="${k}">${esc(t)}</button>`).join("");
   document.querySelectorAll("th.sortable").forEach(th=>{const base=th.textContent.replace(/ [▲▼]$/,""); th.textContent=base+(th.dataset.k===ui.sort?(ui.dir>0?" ▲":" ▼"):"");});
-  document.body.classList.toggle("v-day",ui.view==="day"); document.body.classList.toggle("v-load",ui.view==="load"); document.body.classList.toggle("v-month",ui.view==="month"); document.body.classList.toggle("v-stn",ui.view==="stn"); document.body.classList.toggle("v-dsp",ui.view==="dsp"); document.body.classList.toggle("v-pri",ui.view==="pri"); document.body.classList.toggle("v-kpi",ui.view==="kpi"); document.body.classList.toggle("v-ret",ui.view==="ret");
-  document.querySelectorAll("#vtabs [data-view]").forEach(b=>{ b.classList.toggle("on",b.dataset.view===ui.view); if(b.dataset.view==="day"){ const n=all.filter(w=>w.st==="past"||(w.st==="over"&&!w.hold)||pzAlert(w)).length; b.querySelector(".ct").textContent=n||""; } if(b.dataset.view==="ret"){ const n=all.filter(w=>w.retPending).length; b.querySelector(".ct").textContent=n||""; } });
-  safeRun("今日控管",renderDay); safeRun("月負荷",renderLoad); safeRun("駐站",renderStn); safeRun("派遣檢查",renderDsp); safeRun("優先排工",renderPri); safeRun("考核統計",renderKpi); safeRun("退工",renderRet);
+  document.body.classList.toggle("v-day",ui.view==="day"); document.body.classList.toggle("v-load",ui.view==="load"); document.body.classList.toggle("v-month",ui.view==="month"); document.body.classList.toggle("v-stn",ui.view==="stn"); document.body.classList.toggle("v-dsp",ui.view==="dsp"); document.body.classList.toggle("v-pri",ui.view==="pri"); document.body.classList.toggle("v-kpi",ui.view==="kpi"); document.body.classList.toggle("v-ret",ui.view==="ret"); document.body.classList.toggle("v-todo",ui.view==="todo");
+  document.querySelectorAll("#vtabs [data-view]").forEach(b=>{ b.classList.toggle("on",b.dataset.view===ui.view); if(b.dataset.view==="day"){ const n=all.filter(w=>w.st==="past"||(w.st==="over"&&!w.hold)||pzAlert(w)).length; b.querySelector(".ct").textContent=n||""; } if(b.dataset.view==="ret"){ const n=all.filter(w=>w.retPending).length; b.querySelector(".ct").textContent=n||""; } if(b.dataset.view==="todo"){ let n=0; try{ n=todoGroups().reduce((a,g)=>a+g.items.length,0); }catch(e){} b.querySelector(".ct").textContent=n||""; } });
+  safeRun("今日控管",renderDay); safeRun("月負荷",renderLoad); safeRun("駐站",renderStn); safeRun("派遣檢查",renderDsp); safeRun("優先排工",renderPri); safeRun("考核統計",renderKpi); safeRun("退工",renderRet); safeRun("待處理",renderTodo);
   if(ui.view!=="month") return;
   safeRun("工單明細",()=>renderTable(all)); safeRun("短天期",renderShort); safeRun("統計",renderStats); safeRun("操作紀錄",renderLog);
   resolveNames();
@@ -3631,8 +3650,8 @@ function logErr(e,where){ try{ console.error(where,e); if(errN++>30) return; con
     if(errN<=3) toast(`「${where}」顯示時發生錯誤，已自動記錄；其他功能可繼續使用`); }catch(x){} }
 function safeRun(where,f){ try{ f(); }catch(e){ logErr(e,where); } }
 function renderNow(){ try{ renderNow0(); }catch(e){ logErr(e,"畫面更新");
-    try{ ["day","load","month","stn","dsp","pri","kpi","ret"].forEach(v=>document.body.classList.toggle("v-"+v,ui.view===v)); document.querySelectorAll("#vtabs [data-view]").forEach(b=>b.classList.toggle("on",b.dataset.view===ui.view)); }catch(x){}
-    safeRun("今日控管",renderDay); safeRun("月負荷",renderLoad); safeRun("駐站",renderStn); safeRun("派遣檢查",renderDsp); safeRun("優先排工",renderPri); safeRun("考核統計",renderKpi); safeRun("退工",renderRet);
+    try{ ["day","load","month","stn","dsp","pri","kpi","ret","todo"].forEach(v=>document.body.classList.toggle("v-"+v,ui.view===v)); document.querySelectorAll("#vtabs [data-view]").forEach(b=>b.classList.toggle("on",b.dataset.view===ui.view)); }catch(x){}
+    safeRun("今日控管",renderDay); safeRun("月負荷",renderLoad); safeRun("駐站",renderStn); safeRun("派遣檢查",renderDsp); safeRun("優先排工",renderPri); safeRun("考核統計",renderKpi); safeRun("退工",renderRet); safeRun("待處理",renderTodo);
     if(ui.view==="month"){ safeRun("工單明細",()=>renderTable(derive().all)); safeRun("短天期",renderShort); safeRun("統計",renderStats); } } }
 window.addEventListener("error",e=>logErr(e.error||e.message,"未預期錯誤"));
 window.addEventListener("unhandledrejection",e=>{ const r=e.reason; if(r&&(r.code==="cancelled"||r.name==="AbortError")) return; logErr(r,"未預期錯誤（非同步）"); });
@@ -4251,6 +4270,68 @@ async function manualDoneDlg(wo){
 }
 
 
+
+/* ---------- 待處理：只列今天需要你決定的事，處理完就消失（11/6） ---------- */
+const SKIPK=()=>"mxplan.skip."+todayISO();
+function skipSet(){ try{ return new Set(JSON.parse(localStorage.getItem(SKIPK())||"[]")); }catch(e){ return new Set(); } }
+function skipAdd(k){ const S=skipSet(); S.add(k); try{ localStorage.setItem(SKIPK(),JSON.stringify([...S])); for(let i=0;i<localStorage.length;i++){ const x=localStorage.key(i); if(x&&x.startsWith("mxplan.skip.")&&x!==SKIPK()) localStorage.removeItem(x); } }catch(e){} }
+function todoGroups(){
+  const {all,shortRows}=derive(), T=todayISO(), S=skipSet(), G=[];
+  const ty=ui.tdType||"", tyOk=x=>!ty||(x.w?x.w.type===ty:x.sh?x.sh.type===ty:x.type?x.type===ty:true);
+  const W=(id,title,why,c,items)=>{ const L=items.filter(x=>!S.has(id+"|"+x.k)&&tyOk(x)); if(L.length) G.push({id,title,why,c,items:L,skipped:items.length-L.length}); };
+  const wi=(w,note,acts)=>({k:w.wo,w,note,acts});
+  /* 匯入提醒 */
+  const imp=[]; const ld=lastDoneImport(); const ago=ld?daysBetween(localDay(ld),T):null;
+  if(ago==null||ago>=1) imp.push({k:"done",html:`<b>完工檔</b><span class="w">${ld?`上次匯入 ${esc(fmtD(localDay(ld)).slice(5))}（${ago} 天前）`:"還沒有匯入過"}</span>`,btn:`<button class="btn sm primary" data-tdimp="done">匯入完工檔</button>`});
+  { let fa=""; for(const f of Object.values(M.flights||{})) if((f.at||"")>fa) fa=f.at; const fd=fa?daysBetween(localDay(fa),T):null;
+    if(Object.keys(M.flights||{}).length&&fd!=null&&fd>=3) imp.push({k:"fl",html:`<b>航班</b><span class="w">上次匯入 ${esc(fmtD(localDay(fa)).slice(5))}（${fd} 天前），調機後預排可能不準</span>`,btn:`<button class="btn sm" data-tdimp="fl">匯入航班</button>`}); }
+  W("imp","今天還沒更新的資料","先匯入，下面的清單才會準","c-blue",imp);
+  const open=all.filter(w=>w.st!=="done"&&!w.removed);
+  W("past","排定已過、還沒完工","確認是完工、退工，還是改期","c-red",open.filter(w=>w.st==="past").sort((a,b)=>String(a.sched).localeCompare(String(b.sched))).map(w=>wi(w,`排定 ${fmtD(w.sched).slice(5)}（${daysBetween(w.sched,T)} 天前）`,"done")));
+  W("need","逾期或 7 天內到期、還沒排","排一個日期，或標待料／暫緩","c-red",open.filter(w=>!w.hold&&!w.wm&&!w.sched&&!w.auto&&(w.st==="over"||w.st==="soon")).sort(cmpDue).map(w=>wi(w,w.effDue?`DUE ${fmtD(w.effDue).slice(5)}${w.left!=null?(w.left<0?`（逾 ${-w.left} 天）`:`（剩 ${w.left} 天）`):""}`:"","pick")));
+  W("fl","航班衝突","排定日或預排日飛機不在可做的地方","c-amber",open.filter(w=>w.flNo||w.projNo||(w.flLast&&w.flLast.none)).map(w=>wi(w,w.flNo?`排定 ${fmtD(w.flNo.d).slice(5)} 飛機不在可做站`:w.projNo?`預排 ${fmtD(w.projD||"").slice(5)} 找不到可做的過夜`:"DUE 前找不到可做的過夜","pick")));
+  W("ret","退工待重排","現場退回、還沒重新排","c-amber",open.filter(w=>w.retPending).map(w=>wi(w,`退工 ${fmtD((w.lastRet||{}).date||"").slice(5)} · ${(w.lastRet||{}).reason||""}`,"pick")));
+  { const L=[]; const last={}; recList("returns").forEach(r=>{ if(r.wo&&!last[r.wo]) last[r.wo]=r; });
+    for(const r of Object.values(last)){ const w=all.find(x=>x.wo===r.wo); if(!w||w.st==="done"||r.closed||!clarWait(r)) continue; const fu=(r.follow||[]).slice(-1)[0]; const d=(fu&&fu.date)||r.date||""; const n=d?daysBetween(d,T):0; if(n<3) continue;
+      L.push({k:r.wo,w,note:`等${esc(r.clarText||CLAR[r.clar]||"回覆")} · 最後更新 ${fmtD(d).slice(5)}（${n} 天前）`,acts:"follow",rid:r.id}); }
+    W("clar","待澄清超過 3 天沒進度","追一下工程／修管，或更新進度","c-amber",L); }
+  W("pz","暫緩到了追蹤日、或 7 天內到期","決定恢復排工或繼續暫緩","c-amber",open.filter(pzAlert).map(w=>wi(w,`${w.holdR&&w.holdR.why?w.holdR.why+" · ":""}${w.effDue?"DUE "+fmtD(w.effDue).slice(5):""}`,"pz")));
+  W("mat","待料：預計到料日已過","確認料到了沒，到了就排","c-amber",open.filter(w=>w.wm&&w.eta&&w.eta<=T).map(w=>wi(w,`預計到料 ${fmtD(w.eta).slice(5)}${w.effDue?" · DUE "+fmtD(w.effDue).slice(5):""}`,"mat")));
+  W("sh","短天期缺上次完工日","補上次完工日，系統才能自動預排","c-gray",shortRows.filter(r=>!r.it.routine&&!r.cancelled&&!r.cur&&!r.last&&r.planBy!=="first"&&(+r.it.cycle||0)>0&&!derive().hmvOn[r.tail]&&!STY_RE.test(String(r.it.task||""))).map(r=>({k:r.tail+"|"+r.key,sh:r,note:`每 ${r.it.cycle} 天`})));
+  try{ const H=healthIssues(); if(H.length) W("hc","資料檢查發現的問題","系統比對後覺得不對勁的地方","c-gray",H); }catch(e){}
+  return G;
+}
+function todoRow(g,x){
+  const ro=canWrite===false, skip=`<button class="td-skip" data-tdskip="${esc(g.id+"|"+x.k)}" title="今天先不處理，明天會再出現">今天略過</button>`;
+  if(g.id==="imp") return `<div class="td-r"><div class="td-m">${x.html}</div><div class="td-a">${ro?"":x.btn}</div></div>`;
+  if(x.sh){ const r=x.sh; return `<div class="td-r"><div class="td-m"><span class="tail-reg">${esc(r.tail)}</span><span class="c">${esc(r.it.task)}</span><span class="t">${esc(r.it.desc||"")}</span><span class="w">${esc(x.note)}</span></div><div class="td-a">${ro?"":`<label class="w" style="display:flex;gap:4px;align-items:center;font-size:12.5px">上次完工<input type="date" data-sl="${esc(r.tail)}|${esc(r.key)}" max="${todayISO()}" style="border:1px solid var(--line);border-radius:6px;padding:3px 6px;background:var(--panel-2)"></label>`}${skip}</div></div>`; }
+  if(x.hc) return `<div class="td-r"><div class="td-m">${x.html}</div><div class="td-a">${ro?"":x.btn||""}${skip}</div></div>`;
+  const w=x.w; const pd=w.sched||(w.auto?w.projD:"");
+  const pick=`<button class="btn sm pick" data-pick="${esc(w.wo)}">${pd?`${w.sched?"排定":"預排"} ${esc(fmtD(pd).slice(5))}`:"排日期"} ▾</button>`;
+  const acts=ro?"":x.acts==="done"?`<button class="btn sm ok" data-qdone="${esc(w.wo)}">✓ 完工</button><button class="btn ghost sm" data-ret="${esc(w.wo)}">退工</button>${pick}`
+    :x.acts==="follow"?`<button class="btn sm primary" data-follow="${esc(x.rid)}">更新進度</button>`
+    :x.acts==="pz"?`<button class="btn sm" data-pz="${esc(w.wo)}">解除暫緩</button>${pick}`
+    :x.acts==="mat"?`<button class="btn sm" data-mat="${esc(w.wo)}">料已到</button>${pick}`:pick;
+  return `<div class="td-r"><div class="td-m"><span class="tail-reg">${esc(w.tail)}</span><span class="c">${esc(cardOf(w)||"WO "+w.wo)}</span><button class="wo-link mono w" data-hist="${esc(w.wo)}">WO ${esc(w.noWo?"—":w.wo)}</button><span class="t" title="${esc(w.title||"")}">${esc(w.title||"")}</span><span class="w">${esc(x.note||"")}</span></div><div class="td-a">${acts}${ro||g.id==="imp"?"":`<button class="btn ghost sm more" data-more="${esc(w.wo)}" aria-label="更多動作">⋯</button>`}${skip}</div></div>`;
+}
+function renderTodo(){
+  const el=$("#secTodo"); if(!el) return; if(ui.view!=="todo"){ el.innerHTML=""; return; }
+  const a=document.activeElement; if(a&&a.closest&&a.closest("#secTodo")&&a.matches("input")) return;
+  const G=todoGroups(), n=G.reduce((s,g)=>s+g.items.length,0), lim=12;
+  ui.tdOpen=ui.tdOpen||{};
+  const types=typeOrder().filter(t=>derive().all.some(w=>w.type===t));
+  el.innerHTML=`<div class="td-hd"><h2>待處理</h2><span class="muted" style="font-size:13px">${esc(dayLabel(todayISO()))} · ${n?`還有 ${n} 項需要你決定`:"都處理完了"}</span><span style="flex:1"></span><div class="fleet-tabs"><button class="chip ${!ui.tdType?"on":""}" data-tdty="">全機隊</button>${types.map(t=>`<button class="chip ${ui.tdType===t?"on":""}" data-tdty="${esc(t)}">${esc(t)}</button>`).join("")}</div></div>
+    ${n?G.map(g=>{ const all_=ui.tdOpen[g.id], L=all_?g.items:g.items.slice(0,lim);
+      return `<div class="td-g ${g.c}"><div class="td-gh"><h3>${esc(g.title)}</h3><span class="ct">${g.items.length}</span><span class="td-why">${esc(g.why)}</span>${g.skipped?`<span class="td-why" style="margin-left:auto">今天已略過 ${g.skipped} 項</span>`:""}</div>${L.map(x=>todoRow(g,x)).join("")}${g.items.length>lim?`<button class="td-more" data-tdall="${g.id}">${all_?"收合":`再顯示 ${g.items.length-lim} 項`}</button>`:""}</div>`; }).join("")
+    :`<div class="td-ok">✓ 目前沒有需要處理的例外。<br><span class="muted" style="font-size:13px">要看今天排了什麼，到「今日控管」。</span></div>`}`;
+}
+document.addEventListener("click",e=>{
+  const ty=e.target.closest("[data-tdty]"); if(ty){ ui.tdType=ty.dataset.tdty; renderTodo(); return; }
+  const s=e.target.closest("[data-tdskip]"); if(s){ skipAdd(s.dataset.tdskip); renderTodo(); renderNow(); return; }
+  const m=e.target.closest("[data-tdall]"); if(m){ ui.tdOpen=ui.tdOpen||{}; ui.tdOpen[m.dataset.tdall]=!ui.tdOpen[m.dataset.tdall]; renderTodo(); return; }
+  const i=e.target.closest("[data-tdimp]"); if(i){ if(i.dataset.tdimp==="done"){ const f=$("#fileDone"); if(f) f.click(); } else { const b=$("#stnFl"); if(b) b.click(); else { ui.view="stn"; renderNow(); } } return; }
+});
+function healthIssues(){ return []; }
 /* ---------- 退工：獨立頁面，一張退工一張小卡（11/3） ---------- */
 function renderRet(){
   const el=$("#secRet"); if(!el) return; if(ui.view!=="ret"){ el.innerHTML=""; return; }
